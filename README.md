@@ -8,12 +8,14 @@ Includes AES-XR, Blowfish-XR, SHA256-90R, and Base64X. Each with extended securi
 
 ## Overview
 
-| Algorithm     | Variant    | Rounds | Block / Output Size | Key Features                               | Status |
-|---------------|------------|--------|---------------------|--------------------------------------------|--------|
-| **AES-XR**    | AES (20R)  | 20     | 128-bit block       | Extended S-boxes, extended key schedule    | ✅ PASS |
-| **Blowfish-XR** | Blowfish (32R) | 32 | 64-bit block     | 34 P-keys, regenerated S-boxes             | ✅ PASS |
-| **SHA256-90R** | SHA-256 (90R) | 90 | 256-bit hash       | Extended rounds, enhanced compression      | ✅ PASS |
-| **Base64X**   | Base64 (X) | –      | Encoded text        | Extended character set, Base85 option      | ✅ PASS |
+| Algorithm        | Rounds | Block / Output Size | Cycles/Byte (cpb) | Bytes/Cycle | Latency per Block (ns) | Throughput/Core (Gbps) | Slowdown vs Standard | Notes                |
+|------------------|--------|---------------------|-------------------|-------------|------------------------|------------------------|---------------------|----------------------|
+| **AES-XR**       | 20     | 128-bit block       | ~24 cpb           | 0.041       | ~86 ns                 | ~2.4 Gbps              | 🔴 2.0× (+100%)      | ↑ Rounds, ↑ S-box    |
+| **Blowfish-XR**  | 32     | 64-bit block        | ~90 cpb           | 0.011       | ~198 ns                | ~0.45 Gbps             | 🔴 2.0× (+100%)      | ↑ Rounds, ↑ P/S-box  |
+| **SHA256-90R**   | 90     | 256-bit hash        | ~21 cpb           | 0.048       | ~169 ns                | ~2.9 Gbps              | 🟡 1.4× (+40%)       | ↑ Rounds, ↑ CompFn   |
+| **Base64X**      | –      | Encoded text        | ~5 cpb            | 0.20        | ~25 ns (per 3B chunk)  | ~9.6 Gbps              | 🟢 1.25× (+25%)      | ↑ Alphabet/Base85    |
+
+\* Assumptions: CPU ~3.5 GHz, single core, no hardware crypto extensions. Slowdown values are relative to standard AES-128, Blowfish-16R, SHA-256 (64R), and Base64.
 
 ---
 
@@ -154,3 +156,4 @@ SHA256-90R/
 - [x] Provide modular reference implementations for comparative analysis 
 - [x] Supply regression vectors to facilitate reproducible experiments
 - [x] Enable accessible testing via Makefile to support further research
+
