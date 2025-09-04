@@ -28,7 +28,7 @@ Includes AES-XR, Blowfish-XR, SHA256-90R, and Base64X. Each with extended securi
 ```
 Plaintext : 6162633132330000 ("abc123")
 Ciphertext: 811d512379011df2da935d8964cd59dd
-Decrypted : 6162633132330000 ("abc123") ✅ PASS
+Decrypted : 6162633132330000 ("abc123")
 ```
 
 ---
@@ -42,7 +42,7 @@ Decrypted : 6162633132330000 ("abc123") ✅ PASS
 ```
 Plaintext : 7465737464617461 ("testdata")
 Ciphertext: c63a9137c6aaa5b8
-Decrypted : 7465737464617461 ("testdata") ✅ PASS
+Decrypted : 7465737464617461 ("testdata")
 ```
 
 ---
@@ -77,17 +77,49 @@ Output: Zm9vYmFy
 
 The project includes a `Makefile` for easy builds.
 
+### *Prerequisites*
+- GCC or Clang (C compiler)  
+- `make` build system  
+- Linux, macOS, or Windows (via WSL)  
+
+**Install**
+
 ```bash
-# Build and run all tests
+git clone https://github.com/<your-username>/SHA256-90R.git
+cd SHA256-90R
+```
+
+**Build:**
+```bash
+make
+```
+
+**Run All Tests:**
+```bash
 make test
+```
 
-# Individual algorithms
-make test-aes       # → bin/aes_xr_test
-make test-blowfish  # → bin/blowfish_xr_test
-make test-sha256    # → bin/sha256_90r_test
-make test-base64    # → bin/base64x_test
+**Run Individual Algorithm Tests:**
 
-# Clean artifacts
+*AES-XR tests → bin/aes_xr_test*
+```bash
+make test-aes
+```
+*Blowfish-XR tests → bin/blowfish_xr_test*
+```bash
+make test-blowfish
+```
+*SHA256-90R tests → bin/sha256_90r_test*
+```bash
+make test-sha256
+```
+*Base64X tests → bin/base64x_test*
+```bash
+make test-base64
+```
+
+**Clean Build Artifacts:**
+```bash
 make clean
 ```
 
@@ -97,6 +129,22 @@ make clean
 
 > [!WARNING]
 > These implementations are *experimental*  educational variants of standard cryptographic primitives (`AES-XR, Blowfish-XR`, `SHA256-90R`, `Base64X`) that logically strengthen security margins by increasing round counts, regenerating S/P-boxes, and diversifying transformations, thereby raising the difficulty of classical cryptanalysis and reducing reliance on standard attack tools; however, they are **not FIPS-validated**, not peer-reviewed, and not hardened against side-channel attacks, so while they may provide meaningful protection in constrained, closed environments (e.g., private research systems, drones, or IoT testbeds), they should not be considered production-secure replacements for vetted, certified cryptographic libraries.
+
+---
+
+## Repository Structure
+```
+SHA256-90R/
+├── src/
+│   ├── aes_xr/           # AES Extended Rounds
+│   ├── blowfish_xr/      # Blowfish Extended Rounds
+│   ├── sha256_90r/       # SHA256 Extended Rounds
+│   └── base64x/          # Base64 Extended
+├── bin/                  # Compiled test executables
+├── tests/                # Comprehensive XR test harness
+├── Makefile              # Build system
+└── README.md             # Documentation
+```
 
 
 ---
