@@ -1165,6 +1165,15 @@ void sha256_90r_transform_neon(struct sha256_90r_internal_ctx *ctx, const BYTE d
 }
 #endif // __ARM_NEON
 
+// Stub implementation for platforms without NEON support
+#if !defined(__aarch64__) && !defined(__ARM_NEON)
+void sha256_90r_transform_neon(struct sha256_90r_internal_ctx *ctx, const BYTE data[])
+{
+    (void)ctx; (void)data;
+    // NEON not supported on this platform - this is a stub to satisfy the linker
+}
+#endif
+
 // AVX-512 implementation disabled - requires special compilation environment
 // TODO: Re-enable when AVX-512 hardware/compilation environment is available
 /*
