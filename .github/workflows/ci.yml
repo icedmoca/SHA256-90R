@@ -101,6 +101,13 @@ jobs:
         make bench-simple
         make timing-test
     
+    - name: Run GPU timing tests
+      if: runner.os == 'Linux' && env.CUDA == '1'
+      run: |
+        # Note: GPU timing tests require CUDA environment variable to be set
+        # sha256_internal.h is used for internal timing analysis (not installed/exported)
+        make timing-test-gpu
+    
     - name: Test installation
       run: |
         make install PREFIX=./install_test
@@ -134,6 +141,13 @@ jobs:
         make timing-test
         # Check that all backends pass timing tests
         grep -q "SECURE" bin/timing_leak_test || exit 1
+    
+    - name: Run GPU timing tests
+      if: runner.os == 'Linux' && env.CUDA == '1'
+      run: |
+        # Note: GPU timing tests require CUDA environment variable to be set
+        # sha256_internal.h is used for internal timing analysis (not installed/exported)
+        make timing-test-gpu
 
   documentation:
     runs-on: ubuntu-latest

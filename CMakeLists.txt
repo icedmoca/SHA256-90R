@@ -1,8 +1,11 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.16...3.28)
 project(SHA256_90R VERSION 3.0.0 LANGUAGES C CXX)
 
-# Enforce relative includes to prevent absolute path issues in CI
+# Force include dirs to stay relative-safe in generated files
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
+
+# Use modern CMake policies for better portability
+cmake_policy(SET CMP0076 NEW)
 
 # Set default build type
 if(NOT CMAKE_BUILD_TYPE)

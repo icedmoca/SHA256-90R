@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include "sha256.h"
+#include "sha256_internal.h"
 
 // SHA-256 constants (same as in main implementation)
 static const uint32_t k_90r_fpga[96] = {

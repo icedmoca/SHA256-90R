@@ -39,6 +39,27 @@ This project is a collection of "extended and hardened" versions of cryptographi
 
 ---
 
+## Header Files & API Usage
+
+### Public API (sha256_90r.h)
+- **Purpose**: Clean, opaque interface for production use
+- **Context Type**: `SHA256_90R_CTX` (forward-declared, opaque)
+- **Functions**: `sha256_90r_init()`, `sha256_90r_update()`, `sha256_90r_final()`
+- **Installation**: Included in `make install` for external projects
+
+### Internal API (sha256_internal.h)
+- **Purpose**: Development, testing, and timing analysis only
+- **Context Type**: Full struct definition with `ctx.state`, `ctx.bitlen`, etc.
+- **Functions**: Internal transforms like `sha256_90r_transform_scalar()`
+- **Visibility**: Available in repo for CodeQL analysis, not installed/exported
+
+### Usage Guidelines
+- **Production code**: Use `sha256_90r.h` only
+- **Timing tests**: Use `sha256_internal.h` for access to internal structures
+- **Benchmarks**: Use `sha256_internal.h` for backend-specific testing
+
+---
+
 ## SHA-256 vs SHA256-90R: Performance & Use Cases
 
 ### Side-by-Side Performance Comparison

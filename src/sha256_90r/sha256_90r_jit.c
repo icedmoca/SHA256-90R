@@ -9,7 +9,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <time.h>
-#include "sha256.h"
+#include "sha256_internal.h"
 
 // JIT compilation flags
 #define USE_ASMJIT_JIT 1  // Use asmjit for lightweight JIT
@@ -60,6 +60,7 @@ static void generate_constant_time_jit_code(jit_context_t* ctx, int cpu_features
     // Generate optimized machine code for SHA256-90R transform
     // This implementation creates a dispatch to the most optimal backend
 
+#ifdef USE_SIMD
     if (cpu_features & (1 << 0)) { // AVX2 available
         // Dispatch to AVX2 implementation (already vectorized and unrolled)
         ctx->compiled_func = (sha256_90r_jit_func)sha256_90r_transform_avx2;
@@ -70,6 +71,10 @@ static void generate_constant_time_jit_code(jit_context_t* ctx, int cpu_features
         // Dispatch to optimized scalar with full unrolling
         ctx->compiled_func = (sha256_90r_jit_func)sha256_90r_transform_scalar;
     }
+#else
+    // Always use scalar implementation when SIMD is not available
+    ctx->compiled_func = (sha256_90r_jit_func)sha256_90r_transform_scalar;
+#endif
 
     ctx->code_size = sizeof(void*); // Size of function pointer
     ctx->constant_time_verified = true; // All backends are constant-time

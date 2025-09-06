@@ -14,7 +14,8 @@
 #include <time.h>
 #include <math.h>
 #include <stdint.h>
-#include "../src/sha256_90r/sha256.h"
+#include "../src/sha256_90r/sha256_internal.h"
+#include "../src/sha256_90r/sha256.h"  // For SHA256_BLOCK_SIZE constant
 
 // Disable SIMD for timing test to ensure constant-time behavior
 #undef USE_SIMD
@@ -31,6 +32,11 @@ typedef struct {
     double min;
     double max;
 } timing_stats_t;
+
+/*********************** FUNCTION DECLARATIONS **********************/
+void collect_timing_samples_backend(double *samples, size_t count,
+                                    const BYTE *input, size_t input_len,
+                                    const char *backend);
 
 /*********************** FUNCTION DEFINITIONS ***********************/
 
