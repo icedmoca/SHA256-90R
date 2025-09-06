@@ -3,7 +3,7 @@
 #include <string.h>
 #include <time.h>
 #include <stdint.h>
-#include "../src/sha256_90r/sha256.h"
+#include "../src/sha256_90r/sha256_internal.h"
 
 #define TEST_SIZE (100 * 1024 * 1024) // 100 MB
 #define BLOCK_SIZE 64

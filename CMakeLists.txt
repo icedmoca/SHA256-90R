@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.10)
 project(SHA256_90R VERSION 3.0.0 LANGUAGES C CXX)
 
+# Enforce relative includes to prevent absolute path issues in CI
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
+
 # Set default build type
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
