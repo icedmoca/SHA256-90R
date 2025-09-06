@@ -13,6 +13,7 @@
 #include <memory.h>
 #include "aes.h"
 #include "sha256.h"
+#include "sha256_internal.h"  // For SHA256-90R internal definitions
 #include "base64.h"
 #include "blowfish.h"
 

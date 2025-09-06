@@ -7,16 +7,16 @@
 *********************************************************************/
 
 #include "sha256_90r.h"
-#include "sha256.h"  // For internal SHA256-90R implementation
+#include "sha256_internal.h"  // For internal SHA256-90R implementation
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 
 #define VERSION "SHA256-90R v3.0"
 
-// Internal structure - wraps the existing SHA256_90R_CTX
+// Internal structure - wraps the internal SHA256_90R_CTX
 struct sha256_90r_ctx {
-    SHA256_90R_CTX internal_ctx;
+    SHA256_90R_CTX internal_ctx;  // This is the internal context from sha256_internal.h
     sha256_90r_mode_t mode;
     sha256_90r_backend_t backend;
 };

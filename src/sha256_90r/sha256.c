@@ -18,6 +18,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "sha256.h"
+#include "sha256_internal.h"  // For SHA256-90R internal definitions
 
 // SIMD includes
 #ifdef USE_SIMD
