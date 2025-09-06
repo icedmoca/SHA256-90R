@@ -1,5 +1,0 @@
-@PACKAGE_INIT@
-
-include("${CMAKE_CURRENT_LIST_DIR}/SHA256_90RTargets.cmake")
-
-check_required_components(SHA256_90R)

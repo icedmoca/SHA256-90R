@@ -26,6 +26,7 @@ Makefile
 # === Benchmark and test outputs ===
 benchmarks/results_*.txt
 tests/timing_leaks_results.txt
+perf.data*
 
 # === IDE / Editor junk ===
 .vscode/

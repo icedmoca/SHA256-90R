@@ -1,8 +1,10 @@
 # Makefile for SHA256-90R Cryptographic Algorithms
 
-.PHONY: all clean test test-aes test-blowfish test-sha256 test-base64 bench-sha256 \
-        bench-sha256-cuda bench-comprehensive bench-simple bench-optimized bench-fast bench timing-test timing-test-gpu timing-test-fpga timing-test-jit \
-        install uninstall help
+.PHONY: all clean test test-aes test-blowfish test-sha256 test-base64 verify-all \
+        verify-aes verify-blowfish verify-sha256 verify-base64 bench-sha256 \
+        bench-sha256-cuda bench-comprehensive bench-simple bench-optimized \
+        bench timing-test timing-test-gpu timing-test-fpga timing-test-jit \
+        timing-test-all install uninstall help bench-quick bench-full
 
 # Ensure bin directory exists
 $(shell mkdir -p bin)
@@ -106,15 +108,6 @@ bench-optimized:
 	@echo "=== Running SHA256-90R Optimized Benchmark ==="
 	./bin/bench_optimized
 
-# Fast implementation benchmark
-bench-fast:
-	@echo "=== Building SHA256-90R Fast Implementation Benchmark ==="
-	gcc -O3 -march=native -mavx2 -DUSE_SIMD -DSHA256_90R_ACCEL_MODE=1 -DSHA256_90R_SECURE_MODE=0 \
-		-o bin/bench_fast benchmarks/bench_fast.c src/sha256_90r/sha256.c \
-		-Isrc/sha256_90r -lm -funroll-loops -finline-functions -ffast-math
-	@echo "=== Running SHA256-90R Fast Implementation Benchmark ==="
-	./bin/bench_fast
-
 # Quick benchmark alias (assumes binary is already built)
 bench: bin/sha256_90r_comprehensive_bench
 	@echo "=== Running SHA256-90R Quick Benchmark ==="
@@ -172,12 +165,18 @@ help:
 	@echo "  verify-sha256    - Run SHA256-90R verification with performance tests"
 	@echo "  verify-base64    - Run Base64X verification with performance tests"
 	@echo "  bench-simple      - Simple benchmark (recommended, clean throughput measurement)"
-	@echo "  bench-optimized   - Optimized benchmark with AVX2/AVX-512 and multi-threading"
+	@echo "  bench-optimized  - Optimized AVX2 benchmark (multi-threaded, high throughput)"
 	@echo "  bench             - Quick benchmark (uses pre-built binary, saves to results_latest.txt)"
+	@echo "  bench-quick       - Fast CI-friendly benchmark (1 iteration, 1MB only)"
+	@echo "  bench-full        - Complete performance benchmark (1000/100/10 iterations)"
 	@echo "  bench-comprehensive - Full benchmark suite (all backends, saves to results_full.txt)"
 	@echo "  bench-sha256     - Build and run SHA256-90R CPU benchmarks"
 	@echo "  bench-sha256-cuda- Build and run SHA256-90R CUDA benchmarks"
-	@echo "  timing-test*     - Run timing side-channel tests (scalar/gpu/fpga/jit)"
+	@echo "  timing-test       - Scalar timing side-channel test"
+	@echo "  timing-test-gpu   - GPU timing side-channel test"
+	@echo "  timing-test-fpga  - FPGA timing side-channel test"
+	@echo "  timing-test-jit   - JIT timing side-channel test"
+	@echo "  timing-test-all   - Run all timing tests"
 	@echo "  install          - Install libraries and headers"
 	@echo "  uninstall        - Remove installed files"
 	@echo "  clean            - Remove all build artifacts"
