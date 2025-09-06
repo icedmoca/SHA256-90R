@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: write
+  actions: write
+  security-events: write
+
 jobs:
   test-linux-x86:
     runs-on: ubuntu-latest
@@ -47,7 +52,7 @@ jobs:
         
     - name: Upload benchmark results
       if: matrix.build-type == 'Release'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: benchmark-${{ matrix.compiler }}-x86
         path: build/bench_results.txt
@@ -71,8 +76,10 @@ jobs:
       with:
         args: |
           bash -c "
+            export DEBIAN_FRONTEND=noninteractive
+            export TZ=UTC
             apt-get update && \
-            apt-get install -y build-essential cmake && \
+            apt-get install -y --no-install-recommends build-essential cmake && \
             cmake -B build -DENABLE_SIMD=ON -DENABLE_ARM_CRYPTO=ON && \
             cmake --build build && \
             cd build && ctest --output-on-failure
@@ -109,8 +116,6 @@ jobs:
     
     - name: Run CodeQL Analysis
       uses: github/codeql-action/analyze@v2
-      with:
-        languages: c
     
     - name: Run timing tests
       run: |

@@ -31,11 +31,15 @@ int base64_test()
 	int idx;
 
 	for (idx = 0; idx < 3; idx++) {
+		// Test encoding
+		memset(buf, 0, sizeof(buf));  // Clear buffer first
 		buf_len = base64_encode(text[idx], buf, strlen(text[idx]), 1);
+		buf[buf_len] = '\0';  // Null terminate the output
 		pass = pass && ((buf_len == strlen(code[idx])) &&
 		                 (buf_len == base64_encode(text[idx], NULL, strlen(text[idx]), 1)));
 		pass = pass && !strcmp(code[idx], buf);
 
+		// Test decoding
 		memset(buf, 0, sizeof(buf));
 		buf_len = base64_decode(code[idx], buf, strlen(code[idx]));
 		pass = pass && ((buf_len == strlen(text[idx])) &&
