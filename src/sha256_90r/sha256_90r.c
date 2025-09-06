@@ -14,6 +14,12 @@
 
 #define VERSION "SHA256-90R v3.0"
 
+// Ensure CUDA constants are available even without CUDA
+#ifndef USE_CUDA
+typedef int cudaError_t;
+#define cudaSuccess 0
+#endif
+
 // Internal structure - wraps the internal sha256_90r_internal_ctx
 struct sha256_90r_ctx {
     struct sha256_90r_internal_ctx internal_ctx;  // This is the internal context from sha256_internal.h
@@ -103,15 +109,72 @@ void sha256_90r_update(SHA256_90R_CTX* ctx, const uint8_t* data, size_t len)
     if (ctx && data) {
         struct sha256_90r_ctx* internal = (struct sha256_90r_ctx*)ctx;
         
-        // Use fast update for FAST_MODE
-        if (internal->mode == SHA256_90R_MODE_FAST) {
-#if defined(USE_SIMD) && !SHA256_90R_SECURE_MODE
-            sha256_90r_update_fast(&internal->internal_ctx, (const BYTE*)data, len);
+        // Backend dispatch based on selected backend
+        switch (internal->backend) {
+            case SHA256_90R_BACKEND_GPU:
+#ifdef USE_CUDA
+                {
+                    // For GPU backend, accumulate data in internal buffer and process in batches
+                    // For simplicity in this update, fall back to CUDA batch processing for large data
+                    if (len >= 64) {
+                        size_t num_blocks = len / 64;
+                        cudaError_t cuda_result = sha256_90r_transform_cuda(&internal->internal_ctx, (const BYTE*)data, num_blocks);
+                        if (cuda_result == cudaSuccess) {
+                            // Update internal state accounting
+                            internal->internal_ctx.bitlen += (num_blocks * 64 * 8);
+                            // Handle remaining bytes with standard method
+                            size_t remaining = len % 64;
+                            if (remaining > 0) {
+                                sha256_90r_update_internal(&internal->internal_ctx, (const BYTE*)data + (num_blocks * 64), remaining);
+                            }
+                            return;
+                        }
+                        // Fall back to scalar if CUDA fails
+                    }
+                    // Fall back to scalar for small data or on CUDA failure
+                    sha256_90r_update_internal(&internal->internal_ctx, (const BYTE*)data, len);
+                }
 #else
-            sha256_90r_update_internal(&internal->internal_ctx, (const BYTE*)data, len);
+                // GPU backend requested but CUDA not available - fall back to scalar
+                sha256_90r_update_internal(&internal->internal_ctx, (const BYTE*)data, len);
 #endif
-        } else {
-            sha256_90r_update_internal(&internal->internal_ctx, (const BYTE*)data, len);
+                break;
+                
+            case SHA256_90R_BACKEND_SIMD:
+#ifdef USE_SIMD
+                // Use SIMD optimized path if available
+                if (internal->mode == SHA256_90R_MODE_FAST) {
+                    sha256_90r_update_fast(&internal->internal_ctx, (const BYTE*)data, len);
+                } else {
+                    sha256_90r_update_internal(&internal->internal_ctx, (const BYTE*)data, len);
+                }
+#else
+                // SIMD requested but not available - fall back to scalar
+                sha256_90r_update_internal(&internal->internal_ctx, (const BYTE*)data, len);
+#endif
+                break;
+                
+            case SHA256_90R_BACKEND_SCALAR:
+            case SHA256_90R_BACKEND_AUTO:
+            default:
+                // Use fast update for FAST_MODE, otherwise standard
+                if (internal->mode == SHA256_90R_MODE_FAST) {
+#if defined(USE_SIMD) && !SHA256_90R_SECURE_MODE
+                    sha256_90r_update_fast(&internal->internal_ctx, (const BYTE*)data, len);
+#else
+                    sha256_90r_update_internal(&internal->internal_ctx, (const BYTE*)data, len);
+#endif
+                } else {
+                    sha256_90r_update_internal(&internal->internal_ctx, (const BYTE*)data, len);
+                }
+                break;
+                
+            case SHA256_90R_BACKEND_SHA_NI:
+            case SHA256_90R_BACKEND_FPGA:
+            case SHA256_90R_BACKEND_JIT:
+                // These backends fall back to scalar for now
+                sha256_90r_update_internal(&internal->internal_ctx, (const BYTE*)data, len);
+                break;
         }
     }
 }

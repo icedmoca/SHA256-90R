@@ -1,3 +1,11 @@
+/*
+ * DEPRECATED: This file has been deprecated in favor of the unified benchmark
+ * in sha256_90r_bench.c which now includes the iteration-based timing logic
+ * from this file. Use sha256_90r_bench.c instead.
+ * 
+ * This file is kept for compatibility but will be removed in a future release.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -162,6 +170,11 @@ void print_header() {
 }
 
 int main() {
+    printf("=== DEPRECATION NOTICE ===\n");
+    printf("This benchmark has been deprecated. Please use sha256_90r_bench instead.\n");
+    printf("The unified benchmark now includes iteration-based timing from this file.\n");
+    printf("=========================\n\n");
+    
     print_header();
     
     // Results file

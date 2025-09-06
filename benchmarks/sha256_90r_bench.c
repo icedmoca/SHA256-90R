@@ -16,9 +16,12 @@
 #include <math.h>
 #include <stdint.h>
 #include <unistd.h>
+#if defined(__x86_64__) || defined(__i386__)
 #include <cpuid.h>
+#endif
 #include <pthread.h>
 #include "../src/sha256_90r/sha256.h"
+#include "../src/sha256_90r/sha256_90r.h"
 
 // Conditional CUDA support
 #ifndef USE_CUDA
@@ -30,6 +33,9 @@ typedef int cudaError_t;
 #define BENCHMARK_RUNS (5)          // Number of benchmark runs for averaging
 #define CPU_CLOCK_GHZ (3.5)         // Assumed CPU clock speed
 #define CPU_CLOCK_HZ (CPU_CLOCK_GHZ * 1000000000.0)
+
+// Global quick mode setting
+static int quick_mode = 0;
 
 // Input sizes for comprehensive benchmarking
 #define INPUT_SIZE_1MB (1024 * 1024)        // 1 MB
@@ -63,9 +69,35 @@ typedef struct {
 /*********************** FUNCTION DEFINITIONS ***********************/
 
 /**
+ * Convert backend string to enum value
+ */
+sha256_90r_backend_t backend_string_to_enum(const char* backend) {
+    if (strcmp(backend, "scalar") == 0) {
+        return SHA256_90R_BACKEND_SCALAR;
+    } else if (strcmp(backend, "simd") == 0 || strcmp(backend, "avx2") == 0) {
+        return SHA256_90R_BACKEND_SIMD;
+    } else if (strcmp(backend, "sha_ni") == 0) {
+        return SHA256_90R_BACKEND_SHA_NI;
+    } else if (strcmp(backend, "gpu") == 0) {
+        return SHA256_90R_BACKEND_GPU;
+    } else if (strcmp(backend, "fpga") == 0) {
+        return SHA256_90R_BACKEND_FPGA;
+    } else if (strcmp(backend, "jit") == 0) {
+        return SHA256_90R_BACKEND_JIT;
+    } else if (strcmp(backend, "pipelined") == 0) {
+        // Map "pipelined" to AUTO for now, as there's no specific pipelined backend
+        return SHA256_90R_BACKEND_AUTO;
+    } else {
+        // Default to scalar for unknown backends
+        return SHA256_90R_BACKEND_SCALAR;
+    }
+}
+
+/**
  * Get CPU information for feature detection
  */
 void get_cpu_info(char* vendor, int* family, int* model, int* stepping) {
+#if defined(__x86_64__) || defined(__i386__)
     uint32_t regs[4];
     __cpuid(0, regs[0], regs[1], regs[2], regs[3]);
 
@@ -78,24 +110,39 @@ void get_cpu_info(char* vendor, int* family, int* model, int* stepping) {
     *family = ((regs[0] >> 8) & 0xF) + ((regs[0] >> 20) & 0xFF);
     *model = ((regs[0] >> 4) & 0xF) | ((regs[0] >> 12) & 0xF0);
     *stepping = regs[0] & 0xF;
+#else
+    // Default values for non-x86 platforms
+    strcpy(vendor, "Unknown");
+    *family = 0;
+    *model = 0;
+    *stepping = 0;
+#endif
 }
 
 /**
  * Check if AVX2 is supported
  */
 int cpu_supports_avx2(void) {
+#if defined(__x86_64__) || defined(__i386__)
     uint32_t regs[4];
     __cpuid_count(7, 0, regs[0], regs[1], regs[2], regs[3]);
     return (regs[1] & (1 << 5)) != 0; // AVX2 bit
+#else
+    return 0; // Not supported on non-x86 platforms
+#endif
 }
 
 /**
  * Check if SHA-NI is supported
  */
 int cpu_supports_sha_ni(void) {
+#if defined(__x86_64__) || defined(__i386__)
     uint32_t regs[4];
     __cpuid_count(7, 0, regs[0], regs[1], regs[2], regs[3]);
     return (regs[1] & (1 << 29)) != 0; // SHA-NI bit
+#else
+    return 0; // Not supported on non-x86 platforms
+#endif
 }
 
 /**
@@ -110,100 +157,67 @@ void generate_test_input(BYTE* input, size_t size) {
 }
 
 /**
- * Time SHA256-90R processing of large input data with specific backend
+ * Time SHA256-90R processing with iteration-based timing for accurate measurements
  * Returns throughput in Gbps for the given input size
  */
 double benchmark_backend_throughput(const BYTE* input, size_t input_len, const char* backend, int num_runs) {
     double total_time = 0.0;
-    double total_bytes_processed = 0.0;
+    
+    // Determine iterations based on quick mode or input size
+    int iterations;
+    if (quick_mode) {
+        iterations = 1;  // Quick mode: always use 1 iteration regardless of input size
+    } else {
+        // Normal mode: determine iterations based on input size (matching optimized benchmark approach)
+        iterations = 1000;
+        if (input_len >= 10 * 1024 * 1024) iterations = 100;  // 10MB+
+        if (input_len >= 100 * 1024 * 1024) iterations = 10;  // 100MB+
+    }
 
     for (int run = 0; run < num_runs; run++) {
         struct timespec start, end;
-        SHA256_90R_CTX ctx;
-        BYTE hash[SHA256_BLOCK_SIZE];
+        uint8_t hash[SHA256_90R_DIGEST_SIZE];
+
+        // Initialize context with specified backend
+        sha256_90r_backend_t backend_enum = backend_string_to_enum(backend);
+        SHA256_90R_CTX *ctx = sha256_90r_new_backend(backend_enum);
+        if (!ctx) {
+            fprintf(stderr, "Failed to create context for backend: %s\n", backend);
+            continue;
+        }
 
         // Start timing
         clock_gettime(CLOCK_MONOTONIC_RAW, &start);
 
-        // Initialize context
-        sha256_90r_init(&ctx);
+        // Iteration-based timing loop
+        for (int iter = 0; iter < iterations; iter++) {
+            // Progress indicator for longer benchmarks
+            if (iter % 10 == 0 && iterations > 1) {
+                printf("    Progress: iteration %d/%d complete\n", iter, iterations);
+                fflush(stdout);
+            }
+            
+            // Reset context for each iteration
+            sha256_90r_reset(ctx);
+            
+            // Process input data in chunks to simulate real-world usage
+            size_t remaining = input_len;
+            size_t offset = 0;
+            const size_t chunk_size = 1024 * 64; // 64KB chunks
 
-        // Process input data in chunks to simulate real-world usage
-        size_t remaining = input_len;
-        size_t offset = 0;
-        const size_t chunk_size = 1024 * 64; // 64KB chunks
+            while (remaining > 0) {
+                size_t process_size = (remaining > chunk_size) ? chunk_size : remaining;
 
-        while (remaining > 0) {
-            size_t process_size = (remaining > chunk_size) ? chunk_size : remaining;
+                // Update with chunk - backend dispatch is handled internally
+                sha256_90r_update(ctx, (const uint8_t*)(input + offset), process_size);
 
-            // Update with chunk
-            sha256_90r_update(&ctx, input + offset, process_size);
-
-            // Call appropriate backend transform periodically
-            if (strcmp(backend, "scalar") == 0) {
-                sha256_90r_transform_scalar(&ctx, ctx.data);
-            } else if (strcmp(backend, "simd") == 0) {
-#ifdef USE_SIMD
-                if (cpu_supports_avx2()) {
-                    sha256_90r_transform_avx2(&ctx, ctx.data);
-                } else {
-                    sha256_90r_transform_scalar(&ctx, ctx.data);
-                }
-#else
-                sha256_90r_transform_scalar(&ctx, ctx.data);
-#endif
-            } else if (strcmp(backend, "sha_ni") == 0) {
-#ifdef USE_SHA_NI
-                if (cpu_supports_sha_ni()) {
-                    sha256_90r_transform_sha_ni(&ctx, ctx.data);
-                } else {
-                    sha256_90r_transform_scalar(&ctx, ctx.data);
-                }
-#else
-                sha256_90r_transform_scalar(&ctx, ctx.data);
-#endif
-            } else if (strcmp(backend, "gpu") == 0) {
-#ifdef USE_CUDA
-                // Use actual CUDA implementation when available
-                cudaError_t cudaStatus = sha256_90r_transform_cuda(&ctx, ctx.data, 1);
-                if (cudaStatus != cudaSuccess) {
-                    fprintf(stderr, "CUDA error: %s\n", cudaGetErrorString(cudaStatus));
-                    sha256_90r_transform_scalar(&ctx, ctx.data);
-                }
-#else
-                // Fallback to scalar when CUDA not available
-                sha256_90r_transform_scalar(&ctx, ctx.data);
-#endif
-            } else if (strcmp(backend, "fpga") == 0) {
-#ifdef USE_FPGA_PIPELINE
-                // Use FPGA pipeline simulation
-                sha256_90r_transform_fpga(&ctx, ctx.data);
-#else
-                // Fallback to scalar for benchmark consistency
-                sha256_90r_transform_scalar(&ctx, ctx.data);
-#endif
-            } else if (strcmp(backend, "pipelined") == 0) {
-                // Use pipelined implementation for overlapped processing
-                sha256_90r_transform_pipelined(&ctx, ctx.data, 1);
-            } else if (strcmp(backend, "jit") == 0) {
-#ifdef USE_JIT_CODEGEN
-                // Use JIT-compiled implementation
-                sha256_90r_transform_jit(&ctx, ctx.data);
-#else
-                // Fallback to scalar for benchmark consistency
-                sha256_90r_transform_scalar(&ctx, ctx.data);
-#endif
-            } else {
-                // Default to scalar
-                sha256_90r_transform_scalar(&ctx, ctx.data);
+                offset += process_size;
+                remaining -= process_size;
             }
 
-            offset += process_size;
-            remaining -= process_size;
+            // Finalize hash
+            sha256_90r_final(ctx, hash);
         }
-
-        // Finalize hash
-        sha256_90r_final(&ctx, hash);
 
         // End timing
         clock_gettime(CLOCK_MONOTONIC_RAW, &end);
@@ -213,12 +227,15 @@ double benchmark_backend_throughput(const BYTE* input, size_t input_len, const c
                             (end.tv_nsec - start.tv_nsec) / 1000000000.0;
 
         total_time += elapsed_sec;
-        total_bytes_processed += input_len;
+
+        // Free context
+        sha256_90r_free(ctx);
     }
 
-    // Calculate average throughput: (bytes_processed / elapsed_time) / 1e9 for Gbps
+    // Calculate average throughput with iteration multiplier
     double avg_time_sec = total_time / num_runs;
-    double throughput_gbps = (total_bytes_processed / avg_time_sec) / 1000000000.0;
+    double total_bytes_processed = (double)input_len * iterations;
+    double throughput_gbps = (total_bytes_processed * 8) / (avg_time_sec * 1e9);
 
     return throughput_gbps;
 }
@@ -268,6 +285,11 @@ benchmark_result_t benchmark_gpu_batch(const BYTE* test_input, size_t input_size
     result.avg_throughput_gbps = 0.0;
     result.speedup_vs_scalar = 0.0;
 
+    // Suppress unused parameter warnings
+    (void)test_input;
+    (void)input_size;
+    (void)batch_size;
+
     printf("GPU batch benchmark currently disabled\n");
     return result;
 }
@@ -295,13 +317,13 @@ benchmark_result_t benchmark_backend_comprehensive(const char* backend_name, con
         return result;
     }
 
-    // Define input sizes for testing
+    // Define input sizes for testing - respect quick mode
     input_size_config_t input_sizes[] = {
         {INPUT_SIZE_1MB, "1MB"},
         {INPUT_SIZE_10MB, "10MB"},
         {INPUT_SIZE_100MB, "100MB"}
     };
-    const int num_sizes = 3;
+    const int num_sizes = quick_mode ? 1 : 3;  // Only test 1MB in quick mode
 
     // Benchmark each input size
     double throughputs[num_sizes];
@@ -318,22 +340,31 @@ benchmark_result_t benchmark_backend_comprehensive(const char* backend_name, con
         }
         generate_test_input(test_input, input_sizes[i].input_size);
 
-        // Run benchmark
-        double throughput = benchmark_backend_throughput(test_input, input_sizes[i].input_size, backend_name, BENCHMARK_RUNS);
+        // Run benchmark with iteration-based timing - use 1 run in quick mode
+        int runs = quick_mode ? 1 : BENCHMARK_RUNS;
+        double throughput = benchmark_backend_throughput(test_input, input_sizes[i].input_size, backend_name, runs);
         throughputs[i] = throughput;
-
-        printf("    %s throughput: %.4f Gbps\n", input_sizes[i].size_name, throughput);
+        
+        // Calculate cycles per byte for additional insight
+        double cycles_per_byte = (CPU_CLOCK_HZ / 1e9) / (throughput / 8.0);
+        printf("    %s throughput: %.4f Gbps (%.2f cycles/byte)\n", input_sizes[i].size_name, throughput, cycles_per_byte);
 
         free(test_input);
     }
 
-    // Store results
+    // Store results - handle quick mode properly
     result.throughput_1mb_gbps = throughputs[0];
-    result.throughput_10mb_gbps = throughputs[1];
-    result.throughput_100mb_gbps = throughputs[2];
-
-    // Calculate average throughput across all sizes
-    result.avg_throughput_gbps = (throughputs[0] + throughputs[1] + throughputs[2]) / 3.0;
+    if (quick_mode) {
+        // In quick mode, only 1MB is tested
+        result.throughput_10mb_gbps = 0.0;
+        result.throughput_100mb_gbps = 0.0;
+        result.avg_throughput_gbps = throughputs[0];
+    } else {
+        result.throughput_10mb_gbps = throughputs[1];
+        result.throughput_100mb_gbps = throughputs[2];
+        // Calculate average throughput across all sizes
+        result.avg_throughput_gbps = (throughputs[0] + throughputs[1] + throughputs[2]) / 3.0;
+    }
 
     // Speedup will be calculated later after we have scalar baseline
     result.speedup_vs_scalar = 0.0;
@@ -349,30 +380,56 @@ benchmark_result_t benchmark_backend_comprehensive(const char* backend_name, con
 void print_results_table(benchmark_result_t results[], int num_results, double scalar_baseline) {
     printf("\n");
     printf("=== SHA256-90R Comprehensive Benchmark Results ===\n");
-    printf("Testing input sizes: 1MB, 10MB, 100MB (averaged over %d runs each)\n", BENCHMARK_RUNS);
-    printf("Throughput calculation: (bytes_processed / elapsed_time) / 1e9 Gbps\n");
+    if (quick_mode) {
+        printf("Testing input sizes: 1MB only (1 run each) - Quick Mode\n");
+        printf("Iteration-based timing: 1 iteration (1MB)\n");
+    } else {
+        printf("Testing input sizes: 1MB, 10MB, 100MB (averaged over %d runs each)\n", BENCHMARK_RUNS);
+        printf("Iteration-based timing: 1000 iterations (1MB), 100 (10MB), 10 (100MB)\n");
+    }
+    printf("Throughput calculation: (total_bytes_processed * 8) / (elapsed_time * 1e9) Gbps\n");
     printf("CPU Clock: %.1f GHz (assumed)\n", CPU_CLOCK_GHZ);
     printf("\n");
 
-    printf("%-12s | %-12s | %-12s | %-12s | %-12s | %-12s\n",
-           "Backend", "1MB (Gbps)", "10MB (Gbps)", "100MB (Gbps)", "Avg (Gbps)", "Speedup");
-    printf("%-12s | %-12s | %-12s | %-12s | %-12s | %-12s\n",
-           "------------", "------------", "------------", "------------", "------------", "----------");
+    if (quick_mode) {
+        printf("%-12s | %-12s | %-12s\n",
+               "Backend", "1MB (Gbps)", "Speedup");
+        printf("%-12s | %-12s | %-12s\n",
+               "------------", "------------", "----------");
+    } else {
+        printf("%-12s | %-12s | %-12s | %-12s | %-12s | %-12s\n",
+               "Backend", "1MB (Gbps)", "10MB (Gbps)", "100MB (Gbps)", "Avg (Gbps)", "Speedup");
+        printf("%-12s | %-12s | %-12s | %-12s | %-12s | %-12s\n",
+               "------------", "------------", "------------", "------------", "------------", "----------");
+    }
 
     for (int i = 0; i < num_results; i++) {
         if (results[i].supported) {
             double speedup = (scalar_baseline > 0.0) ? results[i].avg_throughput_gbps / scalar_baseline : 0.0;
-            printf("%-12s | %-12.4f | %-12.4f | %-12.4f | %-12.4f | %-12.2fx\n",
-                   results[i].name,
-                   results[i].throughput_1mb_gbps,
-                   results[i].throughput_10mb_gbps,
-                   results[i].throughput_100mb_gbps,
-                   results[i].avg_throughput_gbps,
-                   speedup);
+            if (quick_mode) {
+                printf("%-12s | %-12.4f | %-12.2fx\n",
+                       results[i].name,
+                       results[i].throughput_1mb_gbps,
+                       speedup);
+            } else {
+                printf("%-12s | %-12.4f | %-12.4f | %-12.4f | %-12.4f | %-12.2fx\n",
+                       results[i].name,
+                       results[i].throughput_1mb_gbps,
+                       results[i].throughput_10mb_gbps,
+                       results[i].throughput_100mb_gbps,
+                       results[i].avg_throughput_gbps,
+                       speedup);
+            }
         } else {
-            printf("%-12s | %-12s | %-12s | %-12s | %-12s | %-12s\n",
-                   results[i].name,
-                   "N/A", "N/A", "N/A", "N/A", "N/A");
+            if (quick_mode) {
+                printf("%-12s | %-12s | %-12s\n",
+                       results[i].name,
+                       "N/A", "N/A");
+            } else {
+                printf("%-12s | %-12s | %-12s | %-12s | %-12s | %-12s\n",
+                       results[i].name,
+                       "N/A", "N/A", "N/A", "N/A", "N/A");
+            }
         }
     }
 }
@@ -389,29 +446,50 @@ void save_results_to_file(benchmark_result_t results[], int num_results, const c
 
     fprintf(fp, "# SHA256-90R Comprehensive Benchmark Results\n");
     fprintf(fp, "# Generated: %s", ctime(&(time_t){time(NULL)}));
-    fprintf(fp, "# Input sizes tested: 1MB, 10MB, 100MB\n");
-    fprintf(fp, "# Runs per test: %d\n", BENCHMARK_RUNS);
-    fprintf(fp, "# Throughput calculation: (bytes_processed / elapsed_time) / 1e9 Gbps\n");
+    if (quick_mode) {
+        fprintf(fp, "# Input sizes tested: 1MB only (Quick Mode)\n");
+        fprintf(fp, "# Runs per test: 1\n");
+        fprintf(fp, "# Iteration-based timing: 1 iteration (1MB)\n");
+    } else {
+        fprintf(fp, "# Input sizes tested: 1MB, 10MB, 100MB\n");
+        fprintf(fp, "# Runs per test: %d\n", BENCHMARK_RUNS);
+        fprintf(fp, "# Iteration-based timing: 1000 iterations (1MB), 100 (10MB), 10 (100MB)\n");
+    }
+    fprintf(fp, "# Throughput calculation: (total_bytes_processed * 8) / (elapsed_time * 1e9) Gbps\n");
     fprintf(fp, "# CPU Clock: %.1f GHz\n", CPU_CLOCK_GHZ);
     if (scalar_baseline > 0.0) {
         fprintf(fp, "# Scalar baseline: %.4f Gbps\n", scalar_baseline);
     }
     fprintf(fp, "\n");
 
-    fprintf(fp, "Backend,Throughput_1MB_Gbps,Throughput_10MB_Gbps,Throughput_100MB_Gbps,Avg_Throughput_Gbps,Speedup_vs_Scalar,Supported\n");
-
-    for (int i = 0; i < num_results; i++) {
-        if (results[i].supported) {
-            double speedup = (scalar_baseline > 0.0) ? results[i].avg_throughput_gbps / scalar_baseline : 0.0;
-            fprintf(fp, "%s,%.4f,%.4f,%.4f,%.4f,%.2f,1\n",
-                    results[i].name,
-                    results[i].throughput_1mb_gbps,
-                    results[i].throughput_10mb_gbps,
-                    results[i].throughput_100mb_gbps,
-                    results[i].avg_throughput_gbps,
-                    speedup);
-        } else {
-            fprintf(fp, "%s,N/A,N/A,N/A,N/A,N/A,0\n", results[i].name);
+    if (quick_mode) {
+        fprintf(fp, "Backend,Throughput_1MB_Gbps,Speedup_vs_Scalar,Supported\n");
+        for (int i = 0; i < num_results; i++) {
+            if (results[i].supported) {
+                double speedup = (scalar_baseline > 0.0) ? results[i].avg_throughput_gbps / scalar_baseline : 0.0;
+                fprintf(fp, "%s,%.4f,%.2f,1\n",
+                        results[i].name,
+                        results[i].throughput_1mb_gbps,
+                        speedup);
+            } else {
+                fprintf(fp, "%s,N/A,N/A,0\n", results[i].name);
+            }
+        }
+    } else {
+        fprintf(fp, "Backend,Throughput_1MB_Gbps,Throughput_10MB_Gbps,Throughput_100MB_Gbps,Avg_Throughput_Gbps,Speedup_vs_Scalar,Supported\n");
+        for (int i = 0; i < num_results; i++) {
+            if (results[i].supported) {
+                double speedup = (scalar_baseline > 0.0) ? results[i].avg_throughput_gbps / scalar_baseline : 0.0;
+                fprintf(fp, "%s,%.4f,%.4f,%.4f,%.4f,%.2f,1\n",
+                        results[i].name,
+                        results[i].throughput_1mb_gbps,
+                        results[i].throughput_10mb_gbps,
+                        results[i].throughput_100mb_gbps,
+                        results[i].avg_throughput_gbps,
+                        speedup);
+            } else {
+                fprintf(fp, "%s,N/A,N/A,N/A,N/A,N/A,0\n", results[i].name);
+            }
         }
     }
 
@@ -438,10 +516,14 @@ void print_system_info(void) {
     printf("\n");
 }
 
+/*********************** FORWARD DECLARATIONS ***********************/
+void benchmark_multicore_scaling(const char* backend, int max_threads);
+void run_perf_profiling(const char* backend, size_t input_size);
+
 /*********************** MAIN FUNCTION ***********************/
 int main(int argc, char* argv[]) {
     printf("=== SHA256-90R Comprehensive Benchmark Suite ===\n");
-    printf("Measuring throughput across multiple input sizes with correct calculation\n\n");
+    printf("Measuring throughput across multiple input sizes with iteration-based timing\n");
 
     // Parse command line arguments
     int enable_perf = 0;
@@ -458,19 +540,30 @@ int main(int argc, char* argv[]) {
             enable_multicore = 1;
             multicore_backend = argv[i + 1];
             i++; // Skip next argument
+        } else if (strcmp(argv[i], "--quick") == 0) {
+            quick_mode = 1;
         } else if (strcmp(argv[i], "--help") == 0) {
             printf("Usage: %s [options]\n", argv[0]);
             printf("Options:\n");
             printf("  --perf <backend>      Run perf stat profiling for specified backend\n");
             printf("  --multicore <backend> Run multi-core scaling test for specified backend\n");
+            printf("  --quick               Run quick benchmarks (1 run, 1MB input only)\n");
             printf("  --help                Show this help message\n");
-            printf("\nAvailable backends: scalar, simd, sha_ni, gpu, pipelined, fpga, jit\n");
+            printf("\nAvailable backends: scalar, simd, avx2, sha_ni, gpu, pipelined, fpga, jit\n");
             return 0;
         }
     }
 
     // Print system information
     print_system_info();
+
+    // Print iteration count information and quick mode status
+    if (quick_mode) {
+        printf("Iteration count: 1 (Quick Mode)\n");
+        printf("Quick mode enabled: only 1 run at 1MB input for each backend.\n\n");
+    } else {
+        printf("Iteration counts: 1000 (1MB), 100 (10MB), 10 (100MB) for accurate measurements\n\n");
+    }
 
     // Define backends to benchmark
     const char* backends[] = {
@@ -496,7 +589,11 @@ int main(int argc, char* argv[]) {
 
     // Run comprehensive benchmarks for all backends
     printf("=== Running Comprehensive Benchmarks ===\n");
-    printf("Testing each backend with 1MB, 10MB, and 100MB inputs (%d runs each)\n\n", BENCHMARK_RUNS);
+    if (quick_mode) {
+        printf("Testing each backend with 1MB input (1 run each)\n\n");
+    } else {
+        printf("Testing each backend with 1MB, 10MB, and 100MB inputs (%d runs each)\n\n", BENCHMARK_RUNS);
+    }
 
     for (int i = 0; i < num_backends; i++) {
         results[i] = benchmark_backend_comprehensive(backends[i], descriptions[i]);

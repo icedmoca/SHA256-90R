@@ -55,7 +55,7 @@ verify-blowfish:
 # SHA256-90R verification tests
 verify-sha256:
 	@echo "=== Building SHA256-90R verification tests ==="
-	cd tests && gcc -o ../bin/sha256_90r_verification sha256_90r_verification.c ../src/sha256_90r/sha256.c -I../src/sha256_90r -lm -O3 -march=native -funroll-loops -finline-functions
+	cd tests && gcc -o ../bin/sha256_90r_verification sha256_90r_verification.c ../src/sha256_90r/sha256.c ../src/sha256_90r/sha256_90r.c -I../src/sha256_90r -lm -O3 -march=native -funroll-loops -finline-functions
 	./bin/sha256_90r_verification
 
 # Base64X verification tests
@@ -87,7 +87,7 @@ bin/sha256_90r_comprehensive_bench:
 	@echo "=== Building SHA256-90R Comprehensive Benchmark Suite ==="
 	mkdir -p bin
 	gcc -o bin/sha256_90r_comprehensive_bench benchmarks/sha256_90r_bench.c src/sha256_90r/sha256.c \
-		src/sha256_90r/sha256_90r_jit.c src/sha256_90r/sha256_90r_fpga.c \
+		src/sha256_90r/sha256_90r.c src/sha256_90r/sha256_90r_jit.c src/sha256_90r/sha256_90r_fpga.c \
 		-Isrc/sha256_90r -lm -lpthread -O3 -march=native -DUSE_SIMD -DUSE_SHA_NI -DUSE_FPGA_PIPELINE -DUSE_JIT_CODEGEN
 
 # Simple benchmark (recommended for debugging throughput)
@@ -123,28 +123,28 @@ bench: bin/sha256_90r_comprehensive_bench
 # Timing side-channel leak test (scalar baseline)
 timing-test:
 	@echo "=== Building SHA256-90R Timing Leak Test ==="
-	cd tests && gcc -o ../bin/timing_leak_test timing_leak_test.c ../src/sha256_90r/sha256.c \
+	cd tests && gcc -o ../bin/timing_leak_test timing_leak_test.c ../src/sha256_90r/sha256.c ../src/sha256_90r/sha256_90r.c \
 		-I../src/sha256_90r -lm -O2 -fno-tree-vectorize
 	./bin/timing_leak_test
 
 # Timing test for GPU backend
 timing-test-gpu:
 	@echo "=== Building SHA256-90R GPU Timing Leak Test ==="
-	cd tests && gcc -o ../bin/timing_leak_test_gpu timing_leak_test.c ../src/sha256_90r/sha256.c \
+	cd tests && gcc -o ../bin/timing_leak_test_gpu timing_leak_test.c ../src/sha256_90r/sha256.c ../src/sha256_90r/sha256_90r.c \
 		-I../src/sha256_90r -lm -O2 -DUSE_CUDA -fno-tree-vectorize
 	./bin/timing_leak_test_gpu gpu
 
 # Timing test for FPGA backend
 timing-test-fpga:
 	@echo "=== Building SHA256-90R FPGA Timing Leak Test ==="
-	cd tests && gcc -o ../bin/timing_leak_test_fpga timing_leak_test.c ../src/sha256_90r/sha256.c ../src/sha256_90r/sha256_90r_fpga.c \
+	cd tests && gcc -o ../bin/timing_leak_test_fpga timing_leak_test.c ../src/sha256_90r/sha256.c ../src/sha256_90r/sha256_90r.c ../src/sha256_90r/sha256_90r_fpga.c \
 		-I../src/sha256_90r -lm -O2 -DUSE_FPGA_PIPELINE -fno-tree-vectorize
 	./bin/timing_leak_test_fpga fpga
 
 # Timing test for JIT backend
 timing-test-jit:
 	@echo "=== Building SHA256-90R JIT Timing Leak Test ==="
-	cd tests && gcc -o ../bin/timing_leak_test_jit timing_leak_test.c ../src/sha256_90r/sha256.c ../src/sha256_90r/sha256_90r_jit.c \
+	cd tests && gcc -o ../bin/timing_leak_test_jit timing_leak_test.c ../src/sha256_90r/sha256.c ../src/sha256_90r/sha256_90r.c ../src/sha256_90r/sha256_90r_jit.c \
 		-I../src/sha256_90r -lm -O2 -DUSE_JIT_CODEGEN -fno-tree-vectorize
 	./bin/timing_leak_test_jit jit
 
@@ -226,3 +226,21 @@ uninstall:
 	rm -f $(DESTDIR)$(PKGCONFIGDIR)/sha256_90r.pc
 	-rmdir $(DESTDIR)$(INCLUDEDIR)/sha256_90r 2>/dev/null || true
 	@echo "Uninstall complete!"
+
+bench-quick:
+	@echo "=== Building SHA256-90R Quick Benchmark Suite ==="
+	mkdir -p bin
+	gcc -o bin/sha256_90r_comprehensive_bench benchmarks/sha256_90r_bench.c src/sha256_90r/sha256.c \
+		src/sha256_90r/sha256_90r.c src/sha256_90r/sha256_90r_jit.c src/sha256_90r/sha256_90r_fpga.c \
+		-Isrc/sha256_90r -lm -lpthread -O3 -march=native -DUSE_SIMD -DUSE_SHA_NI -DUSE_FPGA_PIPELINE -DUSE_JIT_CODEGEN
+	@echo "=== Running Quick Benchmarks (1 iteration, 1MB only) ==="
+	./bin/sha256_90r_comprehensive_bench --quick | tee benchmarks/results_quick.txt
+
+bench-full:
+	@echo "=== Building SHA256-90R Full Benchmark Suite ==="
+	mkdir -p bin
+	gcc -o bin/sha256_90r_comprehensive_bench benchmarks/sha256_90r_bench.c src/sha256_90r/sha256.c \
+		src/sha256_90r/sha256_90r.c src/sha256_90r/sha256_90r_jit.c src/sha256_90r/sha256_90r_fpga.c \
+		-Isrc/sha256_90r -lm -lpthread -O3 -march=native -DUSE_SIMD -DUSE_SHA_NI -DUSE_FPGA_PIPELINE -DUSE_JIT_CODEGEN
+	@echo "=== Running Full Comprehensive Benchmarks ==="
+	./bin/sha256_90r_comprehensive_bench | tee benchmarks/results_full.txt
