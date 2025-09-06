@@ -105,13 +105,13 @@ endif()
 
 # Other algorithm libraries
 add_library(aes_xr src/aes_xr/aes.c)
-target_include_directories(aes_xr PUBLIC src/aes_xr)
+target_include_directories(aes_xr INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src/aes_xr)
 
 add_library(blowfish_xr src/blowfish_xr/blowfish.c)
-target_include_directories(blowfish_xr PUBLIC src/blowfish_xr)
+target_include_directories(blowfish_xr INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src/blowfish_xr)
 
 add_library(base64x src/base64x/base64.c)
-target_include_directories(base64x PUBLIC src/base64x)
+target_include_directories(base64x INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src/base64x)
 
 # Test programs
 if(BUILD_TESTS)

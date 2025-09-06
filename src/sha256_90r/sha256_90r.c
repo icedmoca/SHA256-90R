@@ -7,7 +7,7 @@
 *********************************************************************/
 
 #include "sha256_90r.h"
-#include "sha256.h"
+#include "sha256.h"  // For internal SHA256-90R implementation
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>

@@ -268,6 +268,16 @@ make test
 sudo make install
 ```
 
+### Supported Compilers & Platforms
+- **GCC**: 7.0+ (tested with GCC 9.4+)
+- **Clang**: 6.0+ (tested with Clang 10+)
+- **ARM Cross-compilation**: aarch64, armv7 (via QEMU)
+- **CodeQL Analysis**: Automated security analysis in CI
+
+### Header Organization
+- **`sha256_90r.h`**: Public API header - use this for applications
+- **`sha256.h`**: Internal implementation header - for library internals only
+
 ### CMake Configuration Options
 | Option | Default | Description |
 |--------|---------|-------------|

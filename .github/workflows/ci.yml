@@ -110,11 +110,23 @@ jobs:
 
   security-analysis:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
     
     steps:
     - uses: actions/checkout@v3
     
-    - name: Run CodeQL Analysis
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v2
+      with:
+        languages: c-cpp
+    
+    - name: Autobuild
+      uses: github/codeql-action/autobuild@v2
+    
+    - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v2
     
     - name: Run timing tests
