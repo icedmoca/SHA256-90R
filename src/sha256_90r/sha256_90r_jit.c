@@ -18,7 +18,7 @@
 #define REGISTER_TUNING 1  // Optimize register allocation
 
 // Forward declarations for JIT functions
-typedef void (*sha256_90r_jit_func)(SHA256_90R_CTX *ctx, const BYTE data[]);
+typedef void (*sha256_90r_jit_func)(struct sha256_90r_internal_ctx *ctx, const BYTE data[]);
 
 // JIT code generation context
 typedef struct {
@@ -104,12 +104,12 @@ int sha256_90r_jit_init(void) {
 
 // JIT-compiled transform function
 // Forward declaration for the standard transform function
-void sha256_90r_transform(SHA256_90R_CTX *ctx, const BYTE data[]);
+void sha256_90r_transform(struct sha256_90r_internal_ctx *ctx, const BYTE data[]);
 
 // Forward declaration for hardware-accelerated dispatch
-void sha256_90r_transform_hardware(SHA256_90R_CTX *ctx, const BYTE data[]);
+void sha256_90r_transform_hardware(struct sha256_90r_internal_ctx *ctx, const BYTE data[]);
 
-void sha256_90r_transform_jit(SHA256_90R_CTX *ctx, const BYTE data[]) {
+void sha256_90r_transform_jit(struct sha256_90r_internal_ctx *ctx, const BYTE data[]) {
     if (!jit_ctx.is_compiled || !jit_ctx.compiled_func) {
         // Fallback to standard implementation
         sha256_90r_transform_scalar(ctx, data);
@@ -148,7 +148,7 @@ typedef struct {
 jit_timing_result_t jit_timing_test(const BYTE data[]) {
     jit_timing_result_t result = {0};
     struct timespec start, end;
-    SHA256_90R_CTX ctx;
+    struct sha256_90r_internal_ctx ctx;
 
     // Initialize context
     sha256_90r_init(&ctx);

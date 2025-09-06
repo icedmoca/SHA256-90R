@@ -14,9 +14,9 @@
 
 #define VERSION "SHA256-90R v3.0"
 
-// Internal structure - wraps the internal SHA256_90R_CTX
+// Internal structure - wraps the internal sha256_90r_internal_ctx
 struct sha256_90r_ctx {
-    SHA256_90R_CTX internal_ctx;  // This is the internal context from sha256_internal.h
+    struct sha256_90r_internal_ctx internal_ctx;  // This is the internal context from sha256_internal.h
     sha256_90r_mode_t mode;
     sha256_90r_backend_t backend;
 };
@@ -48,7 +48,7 @@ SHA256_90R_CTX* sha256_90r_new(sha256_90r_mode_t mode)
     struct sha256_90r_ctx* ctx = malloc(sizeof(struct sha256_90r_ctx));
     if (!ctx) return NULL;
     
-    sha256_90r_init(&ctx->internal_ctx);
+    sha256_90r_init_internal(&ctx->internal_ctx);
     ctx->mode = mode;
     ctx->backend = SHA256_90R_BACKEND_AUTO;
     
@@ -73,7 +73,7 @@ SHA256_90R_CTX* sha256_90r_new_backend(sha256_90r_backend_t backend)
     struct sha256_90r_ctx* ctx = malloc(sizeof(struct sha256_90r_ctx));
     if (!ctx) return NULL;
     
-    sha256_90r_init(&ctx->internal_ctx);
+    sha256_90r_init_internal(&ctx->internal_ctx);
     ctx->mode = SHA256_90R_MODE_SECURE;  // Default to secure
     ctx->backend = backend;
     
@@ -85,7 +85,7 @@ void sha256_90r_free(SHA256_90R_CTX* ctx)
     if (ctx) {
         // Clear sensitive data
         struct sha256_90r_ctx* internal = (struct sha256_90r_ctx*)ctx;
-        memset(&internal->internal_ctx, 0, sizeof(SHA256_90R_CTX));
+        memset(&internal->internal_ctx, 0, sizeof(struct sha256_90r_internal_ctx));
         free(ctx);
     }
 }
@@ -94,7 +94,7 @@ void sha256_90r_reset(SHA256_90R_CTX* ctx)
 {
     if (ctx) {
         struct sha256_90r_ctx* internal = (struct sha256_90r_ctx*)ctx;
-        sha256_90r_init(&internal->internal_ctx);
+        sha256_90r_init_internal(&internal->internal_ctx);
     }
 }
 
@@ -106,12 +106,12 @@ void sha256_90r_update(SHA256_90R_CTX* ctx, const uint8_t* data, size_t len)
         // Use fast update for FAST_MODE
         if (internal->mode == SHA256_90R_MODE_FAST) {
 #if defined(USE_SIMD) && !SHA256_90R_SECURE_MODE
-            sha256_90r_update_fast(&internal->internal_ctx, data, len);
+            sha256_90r_update_fast(&internal->internal_ctx, (const BYTE*)data, len);
 #else
-            sha256_90r_update(&internal->internal_ctx, data, len);
+            sha256_90r_update_internal(&internal->internal_ctx, (const BYTE*)data, len);
 #endif
         } else {
-            sha256_90r_update(&internal->internal_ctx, data, len);
+            sha256_90r_update_internal(&internal->internal_ctx, (const BYTE*)data, len);
         }
     }
 }
@@ -120,16 +120,16 @@ void sha256_90r_final(SHA256_90R_CTX* ctx, uint8_t hash[SHA256_90R_DIGEST_SIZE])
 {
     if (ctx && hash) {
         struct sha256_90r_ctx* internal = (struct sha256_90r_ctx*)ctx;
-        sha256_90r_final(&internal->internal_ctx, hash);
+        sha256_90r_final_internal(&internal->internal_ctx, (BYTE*)hash);
     }
 }
 
 void sha256_90r_hash(const uint8_t* data, size_t len, uint8_t hash[SHA256_90R_DIGEST_SIZE])
 {
-    SHA256_90R_CTX internal_ctx;
-    sha256_90r_init(&internal_ctx);
-    sha256_90r_update(&internal_ctx, data, len);
-    sha256_90r_final(&internal_ctx, hash);
+    struct sha256_90r_internal_ctx internal_ctx;
+    sha256_90r_init_internal(&internal_ctx);
+    sha256_90r_update_internal(&internal_ctx, (const BYTE*)data, len);
+    sha256_90r_final_internal(&internal_ctx, (BYTE*)hash);
 }
 
 void sha256_90r_hash_mode(const uint8_t* data, size_t len, uint8_t hash[SHA256_90R_DIGEST_SIZE], 

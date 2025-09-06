@@ -13,7 +13,7 @@
 #include <memory.h>
 #include "aes.h"
 #include "sha256.h"
-#include "sha256_internal.h"  // For SHA256-90R internal definitions
+#include "sha256_90r.h"  // For SHA256-90R public API
 #include "base64.h"
 #include "blowfish.h"
 
@@ -71,17 +71,18 @@ void test_sha256_variants()
     BYTE text[] = "abc";
     BYTE hash_std[SHA256_BLOCK_SIZE], hash_90r[SHA256_BLOCK_SIZE];
     SHA256_CTX ctx_std;
-    SHA256_90R_CTX ctx_90r;
-    
+    SHA256_90R_CTX *ctx_90r;
+
     // Standard SHA-256
     sha256_init(&ctx_std);
     sha256_update(&ctx_std, text, strlen((char*)text));
     sha256_final(&ctx_std, hash_std);
-    
+
     // SHA-256-90R
-    sha256_90r_init(&ctx_90r);
-    sha256_90r_update(&ctx_90r, text, strlen((char*)text));
-    sha256_90r_final(&ctx_90r, hash_90r);
+    ctx_90r = sha256_90r_new(SHA256_90R_MODE_SECURE);
+    sha256_90r_update(ctx_90r, text, strlen((char*)text));
+    sha256_90r_final(ctx_90r, hash_90r);
+    sha256_90r_free(ctx_90r);
     
     print_hex(text, strlen((char*)text), "Input");
     print_hex(hash_std, SHA256_BLOCK_SIZE, "SHA-256");

@@ -31,7 +31,7 @@ test-blowfish:
 # SHA256-90R tests (unified test harness)
 test-sha256:
 	@echo "=== Building SHA256-90R tests ==="
-	cd tests && gcc -o ../bin/sha256_90r_test crypto_xr_test.c ../src/sha256_90r/sha256.c ../src/aes_xr/aes.c ../src/base64x/base64.c ../src/blowfish_xr/blowfish.c -I../src/sha256_90r -I../src/aes_xr -I../src/base64x -I../src/blowfish_xr -O2
+	cd tests && gcc -o ../bin/sha256_90r_test crypto_xr_test.c ../src/sha256_90r/sha256_90r.c ../src/sha256_90r/sha256.c ../src/aes_xr/aes.c ../src/base64x/base64.c ../src/blowfish_xr/blowfish.c -I../src/sha256_90r -I../src/aes_xr -I../src/base64x -I../src/blowfish_xr -O2
 	./bin/sha256_90r_test
 
 # Base64X tests

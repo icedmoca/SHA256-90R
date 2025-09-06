@@ -348,7 +348,7 @@ __attribute__((always_inline)) static inline void expand_message_schedule_avx2(W
 /*********************** SHA-256-90R FUNCTION DEFINITIONS ***********************/
 // Scalar-only version for timing analysis (no SIMD dispatch)
 __attribute__((optimize("O3", "unroll-loops", "inline-functions")))
-void sha256_90r_transform_scalar(SHA256_90R_CTX *restrict ctx, const BYTE *restrict data)
+void sha256_90r_transform_scalar(struct sha256_90r_internal_ctx *restrict ctx, const BYTE *restrict data)
 {
 	WORD m[96] __attribute__((aligned(64))); // Extended message expansion with padding
 	WORD a, b, c, d, e, f, g, h;
@@ -399,7 +399,7 @@ void sha256_90r_transform_scalar(SHA256_90R_CTX *restrict ctx, const BYTE *restr
 }
 
 __attribute__((optimize("O3", "unroll-loops", "inline-functions")))
-void sha256_90r_transform(SHA256_90R_CTX *restrict ctx, const BYTE *restrict data)
+void sha256_90r_transform(struct sha256_90r_internal_ctx *restrict ctx, const BYTE *restrict data)
 {
 	// Detect CPU features on first call
 	detect_cpu_features();
@@ -487,7 +487,7 @@ void sha256_90r_transform(SHA256_90R_CTX *restrict ctx, const BYTE *restrict dat
 	ctx->state[4] += e; ctx->state[5] += f; ctx->state[6] += g; ctx->state[7] += h;
 }
 
-void sha256_90r_init(SHA256_90R_CTX *ctx)
+void sha256_90r_init_internal(struct sha256_90r_internal_ctx *ctx)
 {
 	ctx->datalen = 0;
 	ctx->bitlen = 0;
@@ -501,7 +501,7 @@ void sha256_90r_init(SHA256_90R_CTX *ctx)
 	ctx->state[7] = 0x5be0cd19;
 }
 
-void sha256_90r_update(SHA256_90R_CTX *ctx, const BYTE data[], size_t len)
+void sha256_90r_update_internal(struct sha256_90r_internal_ctx *ctx, const BYTE data[], size_t len)
 {
 #if SHA256_90R_SECURE_MODE
 	// Constant-time implementation for secure mode
@@ -515,7 +515,7 @@ void sha256_90r_update(SHA256_90R_CTX *ctx, const BYTE data[], size_t len)
 		WORD should_transform = ((WORD)(ctx->datalen == 64)) - 1; // 0xFFFFFFFF if true, 0x00000000 if false
 
 		// Always perform transform but mask the state update
-		SHA256_90R_CTX temp_ctx = *ctx;
+		struct sha256_90r_internal_ctx temp_ctx = *ctx;
 		sha256_90r_transform(&temp_ctx, ctx->data);
 
 		// Conditionally update context state using arithmetic masking
@@ -568,7 +568,7 @@ void sha256_90r_update(SHA256_90R_CTX *ctx, const BYTE data[], size_t len)
 }
 
 // Fast multi-block update for maximum throughput
-void sha256_90r_update_fast(SHA256_90R_CTX *ctx, const BYTE data[], size_t len)
+void sha256_90r_update_fast(struct sha256_90r_internal_ctx *ctx, const BYTE data[], size_t len)
 {
 #if SHA256_90R_FAST_MODE && defined(USE_SIMD) && defined(__x86_64__)
 	detect_cpu_features();
@@ -612,11 +612,11 @@ void sha256_90r_update_fast(SHA256_90R_CTX *ctx, const BYTE data[], size_t len)
 	}
 #else
 	// Fallback to regular update
-	sha256_90r_update(ctx, data, len);
+	sha256_90r_update_internal(ctx, data, len);
 #endif
 }
 
-void sha256_90r_final(SHA256_90R_CTX *ctx, BYTE hash[])
+void sha256_90r_final_internal(struct sha256_90r_internal_ctx *ctx, BYTE hash[])
 {
 	WORD i;
 
@@ -669,7 +669,7 @@ void sha256_90r_final(SHA256_90R_CTX *ctx, BYTE hash[])
 // SIMD-accelerated transform using AVX2 for x86_64
 #ifdef __x86_64__
 __attribute__((target("avx2")))
-void sha256_90r_transform_avx2(SHA256_90R_CTX *restrict ctx, const BYTE *restrict data)
+void sha256_90r_transform_avx2(struct sha256_90r_internal_ctx *restrict ctx, const BYTE *restrict data)
 {
 	static int avx2_count = 0;
 	if (avx2_count < 5) {
@@ -816,7 +816,7 @@ void sha256_90r_transform_avx2_4way(WORD states[4][8], const BYTE data[4][64])
 
 // Aggressive AVX2 8-way multi-block processing
 __attribute__((target("avx2")))
-void sha256_90r_transform_avx2_8way(SHA256_90R_CTX ctxs[8], const BYTE data[8][64])
+void sha256_90r_transform_avx2_8way(struct sha256_90r_internal_ctx ctxs[8], const BYTE data[8][64])
 {
 	// Pre-expanded message schedules for all 8 blocks (kept in registers)
 	__m256i m0_0, m0_1, m0_2, m0_3, m0_4, m0_5, m0_6, m0_7, m0_8, m0_9, m0_10, m0_11;
@@ -985,7 +985,7 @@ void sha256_90r_transform_avx2_8way(SHA256_90R_CTX ctxs[8], const BYTE data[8][6
 // AVX-512 16-way multi-block processing (when available)
 #ifdef __AVX512F__
 __attribute__((target("avx512f")))
-void sha256_90r_transform_avx512_16way(SHA256_90R_CTX ctxs[16], const BYTE data[16][64])
+void sha256_90r_transform_avx512_16way(struct sha256_90r_internal_ctx ctxs[16], const BYTE data[16][64])
 {
 	// AVX-512 16-way parallel processing with optimal register usage
 	// Keep W[t] words in registers, avoid spills, full unroll 90 rounds
@@ -1110,7 +1110,7 @@ void sha256_90r_transform_avx512_16way(SHA256_90R_CTX ctxs[16], const BYTE data[
 
 // NEON-accelerated transform for ARM
 #ifdef __ARM_NEON
-void sha256_90r_transform_neon(SHA256_90R_CTX *ctx, const BYTE data[])
+void sha256_90r_transform_neon(struct sha256_90r_internal_ctx *ctx, const BYTE data[])
 {
 	WORD a, b, c, d, e, f, g, h, i, j, t1, t2, m[90];
 
@@ -1169,7 +1169,7 @@ void sha256_90r_transform_neon(SHA256_90R_CTX *ctx, const BYTE data[])
 // TODO: Re-enable when AVX-512 hardware/compilation environment is available
 /*
 #ifdef __x86_64__
-void sha256_90r_transform_avx512(SHA256_90R_CTX *ctx, const BYTE data[])
+void sha256_90r_transform_avx512(struct sha256_90r_internal_ctx *ctx, const BYTE data[])
 {
 	// AVX-512 implementation - disabled for compatibility
 	sha256_90r_transform_avx2(ctx, data);
@@ -1193,7 +1193,7 @@ static inline int cpu_has_sha_ni(void) {
 #endif
 
 // Auto-dispatch SIMD function with hardware acceleration priority
-void sha256_90r_transform_simd(SHA256_90R_CTX *ctx, const BYTE data[])
+void sha256_90r_transform_simd(struct sha256_90r_internal_ctx *ctx, const BYTE data[])
 {
 	// For constant-time behavior, always use the scalar implementation
 	// SIMD dispatch introduces timing variations based on CPU feature detection
@@ -1201,7 +1201,7 @@ void sha256_90r_transform_simd(SHA256_90R_CTX *ctx, const BYTE data[])
 }
 
 // Hardware-accelerated transform dispatcher (includes FPGA and JIT options)
-void sha256_90r_transform_hardware(SHA256_90R_CTX *ctx, const BYTE data[])
+void sha256_90r_transform_hardware(struct sha256_90r_internal_ctx *ctx, const BYTE data[])
 {
 	// For constant-time behavior, disable hardware acceleration dispatch
 	// Hardware feature detection introduces timing variations
@@ -1210,7 +1210,7 @@ void sha256_90r_transform_hardware(SHA256_90R_CTX *ctx, const BYTE data[])
 
 // Multi-block SIMD transform (processes 4 blocks simultaneously)
 #ifdef USE_MULTIBLOCK_SIMD
-void sha256_90r_transform_multiblock_simd(SHA256_90R_CTX ctxs[4], const BYTE data[4][64])
+void sha256_90r_transform_multiblock_simd(struct sha256_90r_internal_ctx ctxs[4], const BYTE data[4][64])
 {
 	// Simplified implementation - process blocks sequentially for now
 	// TODO: Implement true SIMD multi-block processing
@@ -1229,7 +1229,7 @@ void sha256_90r_transform_multiblock_simd(SHA256_90R_CTX ctxs[4], const BYTE dat
 
 // Thread context for parallel processing
 typedef struct {
-	SHA256_90R_CTX *ctx;
+	struct sha256_90r_internal_ctx *ctx;
 	const BYTE *data;
 	size_t start_block;
 	size_t num_blocks;
@@ -1240,7 +1240,7 @@ typedef struct {
 void *parallel_worker(void *arg)
 {
 	parallel_worker_ctx_t *worker_ctx = (parallel_worker_ctx_t *)arg;
-	SHA256_90R_CTX local_ctx = *worker_ctx->ctx; // Copy context
+	struct sha256_90r_internal_ctx local_ctx = *worker_ctx->ctx; // Copy context
 	const BYTE *block_data = worker_ctx->data + (worker_ctx->start_block * 64);
 
 	// Process blocks sequentially in this thread
@@ -1259,7 +1259,7 @@ void *parallel_worker(void *arg)
 // SIMD-accelerated multi-block processing (2-4 blocks simultaneously)
 #ifdef USE_SIMD
 #ifdef __x86_64__
-void sha256_90r_transform_multiblock_simd(SHA256_90R_CTX ctxs[4], const BYTE data[4][64])
+void sha256_90r_transform_multiblock_simd(struct sha256_90r_internal_ctx ctxs[4], const BYTE data[4][64])
 {
 	// Process up to 4 blocks simultaneously using SIMD
 	WORD m[4][96] __attribute__((aligned(64)));
@@ -1333,7 +1333,7 @@ typedef struct {
 } pipeline_stage_t;
 
 __attribute__((optimize("O3", "unroll-loops")))
-void sha256_90r_transform_pipelined(SHA256_90R_CTX *ctx, const BYTE data[], size_t num_blocks) {
+void sha256_90r_transform_pipelined(struct sha256_90r_internal_ctx *ctx, const BYTE data[], size_t num_blocks) {
     if (num_blocks <= 1) {
         sha256_90r_transform(ctx, data);
         return;
@@ -1426,7 +1426,7 @@ void sha256_90r_transform_pipelined(SHA256_90R_CTX *ctx, const BYTE data[], size
 }
 
 /*********************** MULTI-BLOCK PARALLEL FUNCTIONS **********************/
-void sha256_90r_transform_parallel(SHA256_90R_CTX *ctx, const BYTE data[], size_t len, int num_threads)
+void sha256_90r_transform_parallel(struct sha256_90r_internal_ctx *ctx, const BYTE data[], size_t len, int num_threads)
 {
 	size_t num_blocks = len / 64; // Convert length to number of blocks
 	if (num_blocks <= 1) {
@@ -1476,7 +1476,7 @@ void sha256_90r_transform_parallel(SHA256_90R_CTX *ctx, const BYTE data[], size_
 }
 
 // Parallel update function
-void sha256_90r_update_parallel(SHA256_90R_CTX *ctx, const BYTE data[], size_t len, int num_threads)
+void sha256_90r_update_parallel(struct sha256_90r_internal_ctx *ctx, const BYTE data[], size_t len, int num_threads)
 {
 	size_t total_blocks = len / 64;
 	size_t remaining_bytes = len % 64;
@@ -1488,7 +1488,7 @@ void sha256_90r_update_parallel(SHA256_90R_CTX *ctx, const BYTE data[], size_t l
 
 	// Handle remaining bytes with standard update
 	if (remaining_bytes > 0) {
-		sha256_90r_update(ctx, data + (total_blocks * 64), remaining_bytes);
+		sha256_90r_update_internal(ctx, data + (total_blocks * 64), remaining_bytes);
 	}
 }
 
@@ -1499,7 +1499,7 @@ void sha256_90r_update_parallel(SHA256_90R_CTX *ctx, const BYTE data[], size_t l
 // Compile-time flag for hardware acceleration mode (WARNING: NOT CONSTANT-TIME)
 // #define SHA256_90R_FAST_MODE enables hardware SHA-NI acceleration
 // #undef SHA256_90R_FAST_MODE uses constant-time software fallback
-void sha256_90r_transform_sha_ni(SHA256_90R_CTX *ctx, const BYTE data[])
+void sha256_90r_transform_sha_ni(struct sha256_90r_internal_ctx *ctx, const BYTE data[])
 {
 	WORD a, b, c, d, e, f, g, h, i, j, t1, t2, m[96];
 
@@ -1576,7 +1576,7 @@ void sha256_90r_transform_sha_ni(SHA256_90R_CTX *ctx, const BYTE data[])
 
 // ARMv8 crypto-accelerated transform
 __attribute__((target("+crypto")))
-void sha256_90r_transform_armv8_crypto(SHA256_90R_CTX *ctx, const BYTE data[])
+void sha256_90r_transform_armv8_crypto(struct sha256_90r_internal_ctx *ctx, const BYTE data[])
 {
 	WORD a, b, c, d, e, f, g, h, i, j, t1, t2, m[96];
 
@@ -1734,7 +1734,7 @@ static void power_profile_print(const power_profile_t* profile, const char* oper
 
 // Tree hashing worker function
 typedef struct {
-	SHA256_90R_CTX *ctx;
+	struct sha256_90r_internal_ctx *ctx;
 	const BYTE *chunk_data;
 	size_t chunk_len;
 	BYTE *output_hash;
@@ -1758,11 +1758,11 @@ void sha256_90r_tree_hash_init(SHA256_90R_TREE_CTX *ctx, size_t chunk_size, int 
 	ctx->processed_bytes = 0;
 
 	// Allocate contexts and intermediate hash storage
-	ctx->contexts = (SHA256_90R_CTX **)malloc(max_threads * sizeof(SHA256_90R_CTX *));
+	ctx->contexts = (struct sha256_90r_internal_ctx **)malloc(max_threads * sizeof(struct sha256_90r_internal_ctx *));
 	ctx->intermediate_hashes = (BYTE **)malloc(max_threads * sizeof(BYTE *));
 
 	for (int i = 0; i < max_threads; ++i) {
-		ctx->contexts[i] = (SHA256_90R_CTX *)malloc(sizeof(SHA256_90R_CTX));
+		ctx->contexts[i] = (struct sha256_90r_internal_ctx *)malloc(sizeof(struct sha256_90r_internal_ctx));
 		ctx->intermediate_hashes[i] = (BYTE *)malloc(SHA256_BLOCK_SIZE);
 	}
 }
@@ -1777,7 +1777,7 @@ void sha256_90r_tree_hash_update(SHA256_90R_TREE_CTX *ctx, const BYTE *data, siz
 
 		// Process chunk using available thread
 		int thread_id = ctx->num_chunks % ctx->max_threads;
-		SHA256_90R_CTX *thread_ctx = ctx->contexts[thread_id];
+		struct sha256_90r_internal_ctx *thread_ctx = ctx->contexts[thread_id];
 
 		sha256_90r_init(thread_ctx);
 		sha256_90r_update(thread_ctx, current_data, chunk_to_process);
@@ -1794,7 +1794,7 @@ void sha256_90r_tree_hash_update(SHA256_90R_TREE_CTX *ctx, const BYTE *data, siz
 void sha256_90r_tree_hash_final(SHA256_90R_TREE_CTX *ctx, BYTE hash[]) {
 	if (ctx->num_chunks == 0) {
 		// Empty input - return standard IV
-		SHA256_90R_CTX empty_ctx;
+		struct sha256_90r_internal_ctx empty_ctx;
 		sha256_90r_init(&empty_ctx);
 		sha256_90r_final(&empty_ctx, hash);
 		return;
@@ -1807,7 +1807,7 @@ void sha256_90r_tree_hash_final(SHA256_90R_TREE_CTX *ctx, BYTE hash[]) {
 	}
 
 	// Build Merkle tree by hashing pairs of intermediate hashes
-	SHA256_90R_CTX merge_ctx;
+	struct sha256_90r_internal_ctx merge_ctx;
 	size_t current_level = ctx->num_chunks;
 	BYTE *current_hashes = (BYTE *)malloc(current_level * SHA256_BLOCK_SIZE);
 
@@ -1829,7 +1829,7 @@ void sha256_90r_tree_hash_final(SHA256_90R_TREE_CTX *ctx, BYTE hash[]) {
 
 		for (size_t i = 0; i < current_level; i += 2) {
 			size_t thread_idx = pairs_processed % ctx->max_threads;
-			SHA256_90R_CTX *worker_ctx = ctx->contexts[thread_idx];
+			struct sha256_90r_internal_ctx *worker_ctx = ctx->contexts[thread_idx];
 
 			// Prepare data for merging two hashes
 			BYTE merge_data[SHA256_BLOCK_SIZE * 2];
@@ -1903,7 +1903,7 @@ extern cudaError_t launch_sha256_90r_cuda_batch(
 
 // CUDA batch processing function
 cudaError_t sha256_90r_transform_cuda_batch(
-	SHA256_90R_CTX *ctxs,
+	struct sha256_90r_internal_ctx *ctxs,
 	const BYTE *data,
 	size_t num_blocks,
 	size_t batch_size
@@ -1947,7 +1947,7 @@ cudaError_t sha256_90r_transform_cuda_batch(
 
 	// Update contexts with results
 	for (size_t i = 0; i < num_blocks; ++i) {
-		SHA256_90R_CTX *ctx = &ctxs[i];
+		struct sha256_90r_internal_ctx *ctx = &ctxs[i];
 		const uint32_t *block_state = h_output + i * 8;
 
 		// Add the computed state to the existing context state
@@ -1963,7 +1963,7 @@ cudaError_t sha256_90r_transform_cuda_batch(
 }
 
 // Single block CUDA processing
-cudaError_t sha256_90r_transform_cuda(SHA256_90R_CTX *ctx, const BYTE *data, size_t num_blocks)
+cudaError_t sha256_90r_transform_cuda(struct sha256_90r_internal_ctx *ctx, const BYTE *data, size_t num_blocks)
 {
 	return sha256_90r_transform_cuda_batch(ctx, data, 1, num_blocks);
 }
@@ -2042,7 +2042,7 @@ __kernel void sha256_90r_opencl_batch(
 }
 )";
 
-cl_int sha256_90r_transform_opencl(SHA256_90R_CTX *ctx, const BYTE *data, size_t num_blocks)
+cl_int sha256_90r_transform_opencl(struct sha256_90r_internal_ctx *ctx, const BYTE *data, size_t num_blocks)
 {
 	// OpenCL implementation - placeholder for full implementation
 	// Would require OpenCL context, command queue, kernel compilation, etc.
@@ -2062,7 +2062,7 @@ int main()
 {
 	BYTE text1[] = {"abc"};
 	BYTE hash[SHA256_BLOCK_SIZE];
-	SHA256_90R_CTX ctx;
+	struct sha256_90r_internal_ctx ctx;
 	int i;
 
 	sha256_90r_init(&ctx);

@@ -203,7 +203,7 @@ void fpga_batch_pipeline_init(fpga_batch_pipeline_t *batch_pipeline, size_t batc
 
 // Process batch of blocks through FPGA pipelines
 void fpga_batch_process(fpga_batch_pipeline_t *batch_pipeline,
-                       SHA256_90R_CTX ctxs[],
+                       struct sha256_90r_internal_ctx ctxs[],
                        const BYTE data[],
                        size_t num_blocks) {
 	uint32_t m[FPGA_PIPELINE_DEPTH][90];
@@ -258,7 +258,7 @@ void fpga_batch_process(fpga_batch_pipeline_t *batch_pipeline,
 }
 
 // Single-block FPGA transform (backward compatibility)
-void sha256_90r_transform_fpga(SHA256_90R_CTX *ctx, const BYTE data[]) {
+void sha256_90r_transform_fpga(struct sha256_90r_internal_ctx *ctx, const BYTE data[]) {
 	fpga_batch_pipeline_t batch_pipeline;
 	fpga_batch_pipeline_init(&batch_pipeline, 1);
 	fpga_batch_process(&batch_pipeline, ctx, data, 1);
