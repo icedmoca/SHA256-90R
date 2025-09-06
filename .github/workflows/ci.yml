@@ -3,8 +3,16 @@ name: CI
 on:
   push:
     branches: [ main, develop ]
+    paths-ignore:
+      - 'README*'
+      - 'SECURITY*'
+      - 'docs/**'
   pull_request:
     branches: [ main ]
+    paths-ignore:
+      - 'README*'
+      - 'SECURITY*'
+      - 'docs/**'
 
 permissions:
   contents: write
