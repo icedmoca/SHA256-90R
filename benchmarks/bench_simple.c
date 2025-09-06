@@ -3,7 +3,10 @@
 #include <string.h>
 #include <time.h>
 #include <stdint.h>
-#include "../src/sha256_90r/sha256_internal.h"
+#include "../src/sha256_90r/sha256_90r.h"
+
+// Define BYTE for compatibility
+typedef unsigned char BYTE;
 
 #define TEST_SIZE (100 * 1024 * 1024) // 100 MB
 #define BLOCK_SIZE 64
@@ -15,25 +18,27 @@ double now_sec() {
 }
 
 int main() {
-    BYTE *data = malloc(TEST_SIZE);
+    uint8_t *data = (uint8_t *)malloc(TEST_SIZE);
     if (!data) {
         fprintf(stderr, "Failed to allocate %d MB\n", TEST_SIZE / (1024*1024));
         return 1;
     }
 
     memset(data, 0xAA, TEST_SIZE); // fixed pattern
-    BYTE hash[32];
-    SHA256_90R_CTX ctx;
+    uint8_t hash[32];
 
     printf("SHA256-90R Simple Benchmark\n");
     printf("Input size: %.1f MB\n", TEST_SIZE / (1024.0*1024.0));
 
-    sha256_90r_init(&ctx);
+    // Use public API with acceleration enabled
+    SHA256_90R_CTX *ctx = sha256_90r_new(SHA256_90R_MODE_ACCEL);
 
     double t0 = now_sec();
-    sha256_90r_update(&ctx, data, TEST_SIZE);
-    sha256_90r_final(&ctx, hash);
+    sha256_90r_update(ctx, data, TEST_SIZE);
+    sha256_90r_final(ctx, hash);
     double t1 = now_sec();
+
+    sha256_90r_free(ctx);
 
     double secs = t1 - t0;
     double gbps = (TEST_SIZE * 8.0) / (secs * 1e9);

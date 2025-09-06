@@ -151,7 +151,7 @@ jit_timing_result_t jit_timing_test(const BYTE data[]) {
     struct sha256_90r_internal_ctx ctx;
 
     // Initialize context
-    sha256_90r_init(&ctx);
+    sha256_90r_init_internal(&ctx);
 
     // Start timing
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);

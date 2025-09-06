@@ -93,7 +93,7 @@ bin/sha256_90r_comprehensive_bench:
 # Simple benchmark (recommended for debugging throughput)
 bench-simple:
 	@echo "=== Building SHA256-90R Simple Benchmark ==="
-	gcc -O3 -march=native -DUSE_SIMD -DSHA256_90R_ACCEL_MODE=1 -DSHA256_90R_SECURE_MODE=0 -o bin/bench_simple benchmarks/bench_simple.c src/sha256_90r/sha256.c -Isrc/sha256_90r -lm
+	gcc -O3 -march=native -DUSE_SIMD -DSHA256_90R_ACCEL_MODE=1 -DSHA256_90R_SECURE_MODE=0 -o bin/bench_simple benchmarks/bench_simple.c src/sha256_90r/sha256_90r.c src/sha256_90r/sha256.c -Isrc/sha256_90r -lm
 	@echo "=== Running SHA256-90R Simple Benchmark ==="
 	./bin/bench_simple
 
@@ -101,7 +101,7 @@ bench-simple:
 bench-optimized:
 	@echo "=== Building SHA256-90R Optimized Benchmark ==="
 	gcc -O3 -march=native -mavx2 -DUSE_SIMD -DSHA256_90R_ACCEL_MODE=1 -DSHA256_90R_SECURE_MODE=0 \
-		-o bin/bench_optimized benchmarks/sha256_90r_bench_optimized.c src/sha256_90r/sha256.c \
+		-o bin/bench_optimized benchmarks/sha256_90r_bench_optimized.c src/sha256_90r/sha256_90r.c src/sha256_90r/sha256.c \
 		-Isrc/sha256_90r -lm -lpthread -funroll-loops -finline-functions
 	@echo "=== Running SHA256-90R Optimized Benchmark ==="
 	./bin/bench_optimized

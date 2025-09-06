@@ -109,21 +109,50 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_libraries(sha256_90r PUBLIC pthread)
 endif()
 
-# Other algorithm libraries
+# AES-XR
 add_library(aes_xr src/aes_xr/aes.c)
-target_include_directories(aes_xr INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src/aes_xr)
+target_include_directories(aes_xr PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/aes_xr>
+    $<INSTALL_INTERFACE:include/aes_xr>
+)
 
+# Blowfish-XR
 add_library(blowfish_xr src/blowfish_xr/blowfish.c)
-target_include_directories(blowfish_xr INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src/blowfish_xr)
+target_include_directories(blowfish_xr PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/blowfish_xr>
+    $<INSTALL_INTERFACE:include/blowfish_xr>
+)
 
+# Base64X
 add_library(base64x src/base64x/base64.c)
-target_include_directories(base64x INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src/base64x)
+target_include_directories(base64x PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/base64x>
+    $<INSTALL_INTERFACE:include/base64x>
+)
+
+# Install rules
+install(TARGETS aes_xr blowfish_xr base64x
+    EXPORT SHA256-90RTargets
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    RUNTIME DESTINATION bin
+    INCLUDES DESTINATION include
+)
+install(DIRECTORY src/aes_xr/ DESTINATION include/aes_xr FILES_MATCHING PATTERN "*.h")
+install(DIRECTORY src/blowfish_xr/ DESTINATION include/blowfish_xr FILES_MATCHING PATTERN "*.h")
+install(DIRECTORY src/base64x/ DESTINATION include/base64x FILES_MATCHING PATTERN "*.h")
 
 # Test programs
 if(BUILD_TESTS)
     # SHA256-90R tests
     add_executable(sha256_90r_test tests/crypto_xr_test.c)
-    target_link_libraries(sha256_90r_test sha256_90r)
+    target_include_directories(sha256_90r_test PRIVATE
+        src/sha256_90r
+        src/aes_xr
+        src/blowfish_xr
+        src/base64x
+    )
+    target_link_libraries(sha256_90r_test sha256_90r aes_xr blowfish_xr base64x)
     
     add_executable(sha256_90r_verification tests/sha256_90r_verification.c)
     target_link_libraries(sha256_90r_verification sha256_90r m)
@@ -132,13 +161,16 @@ if(BUILD_TESTS)
     target_link_libraries(timing_leak_test sha256_90r m)
     
     # Other algorithm tests
-    add_executable(aes_xr_test src/aes_xr/aes_test.c)
+    add_executable(aes_xr_test src/aes_xr/aes_test.c src/aes_xr/aes.c)
+    target_include_directories(aes_xr_test PRIVATE src/aes_xr)
     target_link_libraries(aes_xr_test aes_xr)
-    
-    add_executable(blowfish_xr_test src/blowfish_xr/blowfish_test.c)
+
+    add_executable(blowfish_xr_test src/blowfish_xr/blowfish_test.c src/blowfish_xr/blowfish.c)
+    target_include_directories(blowfish_xr_test PRIVATE src/blowfish_xr)
     target_link_libraries(blowfish_xr_test blowfish_xr)
-    
-    add_executable(base64x_test src/base64x/base64_test.c)
+
+    add_executable(base64x_test src/base64x/base64_test.c src/base64x/base64.c)
+    target_include_directories(base64x_test PRIVATE src/base64x)
     target_link_libraries(base64x_test base64x)
     
     # Enable testing
@@ -169,15 +201,19 @@ install(TARGETS sha256_90r aes_xr blowfish_xr base64x
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
     RUNTIME DESTINATION bin
+    INCLUDES DESTINATION include
 )
 
 install(FILES ${SHA256_90R_HEADERS}
     DESTINATION include/sha256_90r
 )
 
-install(FILES src/aes_xr/aes.h DESTINATION include/aes_xr)
-install(FILES src/blowfish_xr/blowfish.h DESTINATION include/blowfish_xr)
-install(FILES src/base64x/base64.h DESTINATION include/base64x)
+install(DIRECTORY src/aes_xr/ DESTINATION include/aes_xr
+        FILES_MATCHING PATTERN "*.h")
+install(DIRECTORY src/blowfish_xr/ DESTINATION include/blowfish_xr
+        FILES_MATCHING PATTERN "*.h")
+install(DIRECTORY src/base64x/ DESTINATION include/base64x
+        FILES_MATCHING PATTERN "*.h")
 
 # pkg-config file
 configure_file(sha256_90r.pc.in sha256_90r.pc @ONLY)

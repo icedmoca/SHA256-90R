@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <pthread.h>
 #include <math.h>
-#include "../src/sha256_90r/sha256.h"
+#include "../src/sha256_90r/sha256_90r.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -66,48 +66,48 @@ double get_cpu_freq() {
 // Thread work structure
 typedef struct {
     int thread_id;
-    const BYTE* data;
+    const uint8_t* data;
     size_t data_len;
     size_t iterations;
     double elapsed_time;
-    BYTE hash[32];
+    uint8_t hash[32];
 } thread_work_t;
 
 // Worker thread function
 void* worker_thread(void* arg) {
     thread_work_t* work = (thread_work_t*)arg;
-    SHA256_90R_CTX ctx;
-    
+
     double start = get_time();
-    
+
     for (size_t i = 0; i < work->iterations; i++) {
-        sha256_90r_init(&ctx);
-        sha256_90r_update(&ctx, work->data, work->data_len);
-        sha256_90r_final(&ctx, work->hash);
+        SHA256_90R_CTX *ctx = sha256_90r_new(SHA256_90R_MODE_ACCEL);
+        sha256_90r_update(ctx, work->data, work->data_len);
+        sha256_90r_final(ctx, work->hash);
+        sha256_90r_free(ctx);
     }
-    
+
     work->elapsed_time = get_time() - start;
     return NULL;
 }
 
 // Run single-threaded benchmark
-double benchmark_single_thread(const BYTE* data, size_t len, int iterations) {
-    SHA256_90R_CTX ctx;
-    BYTE hash[32];
-    
+double benchmark_single_thread(const uint8_t* data, size_t len, int iterations) {
+    uint8_t hash[32];
+
     double start = get_time();
-    
+
     for (int i = 0; i < iterations; i++) {
-        sha256_90r_init(&ctx);
-        sha256_90r_update(&ctx, data, len);
-        sha256_90r_final(&ctx, hash);
+        SHA256_90R_CTX *ctx = sha256_90r_new(SHA256_90R_MODE_ACCEL);
+        sha256_90r_update(ctx, data, len);
+        sha256_90r_final(ctx, hash);
+        sha256_90r_free(ctx);
     }
-    
+
     return get_time() - start;
 }
 
 // Run multi-threaded benchmark
-double benchmark_multi_thread(const BYTE* data, size_t len, int iterations, int num_threads) {
+double benchmark_multi_thread(const uint8_t* data, size_t len, int iterations, int num_threads) {
     pthread_t* threads = malloc(num_threads * sizeof(pthread_t));
     thread_work_t* work = malloc(num_threads * sizeof(thread_work_t));
     
@@ -187,7 +187,7 @@ int main() {
         printf("Testing with %s input...\n", size_name);
         
         // Allocate and initialize test data
-        BYTE* data = malloc(data_size);
+        uint8_t* data = (uint8_t*)malloc(data_size);
         if (!data) {
             fprintf(stderr, "Failed to allocate %zu bytes\n", data_size);
             continue;
@@ -195,7 +195,7 @@ int main() {
         
         // Fill with pattern
         for (size_t j = 0; j < data_size; j++) {
-            data[j] = (BYTE)(j & 0xFF);
+            data[j] = (uint8_t)(j & 0xFF);
         }
         
         // Determine iterations based on data size
@@ -240,13 +240,13 @@ int main() {
     
     // Run a quick test to verify correctness
     printf("Correctness check:\n");
-    BYTE test_data[] = "abc";
-    BYTE hash[32];
-    SHA256_90R_CTX ctx;
-    
-    sha256_90r_init(&ctx);
-    sha256_90r_update(&ctx, test_data, 3);
-    sha256_90r_final(&ctx, hash);
+    uint8_t test_data[] = "abc";
+    uint8_t hash[32];
+
+    SHA256_90R_CTX *ctx = sha256_90r_new(SHA256_90R_MODE_ACCEL);
+    sha256_90r_update(ctx, test_data, 3);
+    sha256_90r_final(ctx, hash);
+    sha256_90r_free(ctx);
     
     printf("SHA256-90R(\"abc\") = ");
     for (int i = 0; i < 32; i++) {

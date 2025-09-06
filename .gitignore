@@ -1,0 +1,43 @@
+# === Build artifacts ===
+/build/
+/bin/
+/lib/
+/CMakeFiles/
+/CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.cmake
+*.pc
+
+# === Object & library files ===
+*.o
+*.a
+*.so
+*.dll
+*.dylib
+
+# === Compiler intermediates ===
+*.d
+*.out
+*.exe
+*.tmp
+*.log
+
+# === Benchmark and test outputs ===
+benchmarks/results_*.txt
+tests/timing_leaks_results.txt
+
+# === IDE / Editor junk ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# === Python virtualenvs / deps (if ever added) ===
+.venv/
+venv/
+__pycache__/
+*.pyc
