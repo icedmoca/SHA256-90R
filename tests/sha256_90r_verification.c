@@ -15,7 +15,7 @@
 #include <time.h>
 #include <math.h>
 #include <stdint.h>
-#include "../src/sha256_90r/sha256.h"
+#include "../src/sha256_90r/sha256_90r.h"
 
 /****************************** MACROS ******************************/
 #define NUM_SAMPLES 10000
@@ -32,15 +32,15 @@ typedef struct {
 
 /**************************** GLOBAL VARIABLES ****************************/
 // Test data for SHA256-90R verification
-BYTE test_input[] = "Hello, World! This is a test of the SHA256-90R implementation.";
-BYTE test_input_abc[] = "abc";
+uint8_t test_input[] = "Hello, World! This is a test of the SHA256-90R implementation.";
+uint8_t test_input_abc[] = "abc";
 
 /*********************** FUNCTION DEFINITIONS ***********************/
 
 /**
  * Print hex dump of data
  */
-void print_hex(const BYTE data[], size_t len, const char* label) {
+void print_hex(const uint8_t data[], size_t len, const char* label) {
     printf("%s: ", label);
     for (size_t i = 0; i < len; i++) {
         printf("%02x", data[i]);
@@ -119,53 +119,37 @@ double welch_t_test(const double *samples1, size_t count1,
 /**
  * Time a single SHA256-90R operation using specified backend
  */
-double time_sha256_90r_backend(const BYTE *input, size_t input_len, const char* backend) {
+double time_sha256_90r_backend(const uint8_t *input, size_t input_len, const char* backend) {
     struct timespec start, end;
-    SHA256_90R_CTX ctx;
-    BYTE hash[SHA256_BLOCK_SIZE];
+    SHA256_90R_CTX *ctx;
+    uint8_t hash[SHA256_90R_DIGEST_SIZE];
+    sha256_90r_backend_t backend_type = SHA256_90R_BACKEND_SCALAR;
+
+    // Map backend string to backend type
+    if (strcmp(backend, "scalar") == 0) {
+        backend_type = SHA256_90R_BACKEND_SCALAR;
+    } else if (strcmp(backend, "simd") == 0) {
+        backend_type = SHA256_90R_BACKEND_SIMD;
+    } else if (strcmp(backend, "sha_ni") == 0) {
+        backend_type = SHA256_90R_BACKEND_SHA_NI;
+    } else if (strcmp(backend, "gpu") == 0) {
+        backend_type = SHA256_90R_BACKEND_GPU;
+    } else if (strcmp(backend, "fpga") == 0) {
+        backend_type = SHA256_90R_BACKEND_FPGA;
+    } else if (strcmp(backend, "jit") == 0) {
+        backend_type = SHA256_90R_BACKEND_JIT;
+    } else {
+        backend_type = SHA256_90R_BACKEND_SCALAR; // Default
+    }
 
     // Start timing
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
 
-    // Initialize context with fixed values to eliminate initialization timing
-    sha256_90r_init(&ctx);
-
-    // Update with input (now constant-time)
-    sha256_90r_update(&ctx, input, input_len);
-
-    // Call the appropriate backend transform function
-    if (strcmp(backend, "scalar") == 0) {
-        sha256_90r_transform_scalar(&ctx, ctx.data);
-    } else if (strcmp(backend, "simd") == 0) {
-        // Use optimized AVX2 SIMD backend
-#ifdef USE_SIMD
-        sha256_90r_transform_avx2(&ctx, ctx.data);
-#else
-        sha256_90r_transform_scalar(&ctx, ctx.data);
-#endif
-    } else if (strcmp(backend, "sha_ni") == 0) {
-        // Use SHA-NI hybrid backend
-#ifdef USE_SHA_NI
-        sha256_90r_transform_sha_ni(&ctx, ctx.data);
-#else
-        sha256_90r_transform_scalar(&ctx, ctx.data);
-#endif
-    } else if (strcmp(backend, "gpu") == 0) {
-        // GPU backend - for timing tests we use scalar to avoid GPU dispatch overhead
-        sha256_90r_transform_scalar(&ctx, ctx.data);
-    } else if (strcmp(backend, "fpga") == 0) {
-        // FPGA simulation - use scalar for timing tests
-        sha256_90r_transform_scalar(&ctx, ctx.data);
-    } else if (strcmp(backend, "jit") == 0) {
-        // JIT backend - use scalar for timing tests
-        sha256_90r_transform_scalar(&ctx, ctx.data);
-    } else {
-        // Default to scalar
-        sha256_90r_transform_scalar(&ctx, ctx.data);
-    }
-
-    // Finalize (now constant-time)
-    sha256_90r_final(&ctx, hash);
+    // Use public API with specified backend
+    ctx = sha256_90r_new_backend(backend_type);
+    sha256_90r_update(ctx, input, input_len);
+    sha256_90r_final(ctx, hash);
+    sha256_90r_free(ctx);
 
     // End timing
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
@@ -180,7 +164,7 @@ double time_sha256_90r_backend(const BYTE *input, size_t input_len, const char* 
 /**
  * Collect timing samples for a specific backend
  */
-void collect_timing_samples_backend(double *samples, size_t count, const BYTE *input, size_t input_len, const char* backend) {
+void collect_timing_samples_backend(double *samples, size_t count, const uint8_t *input, size_t input_len, const char* backend) {
     printf("Collecting %zu timing samples using %s backend...\n", count, backend);
 
     for (size_t i = 0; i < count; i++) {
@@ -214,21 +198,21 @@ const char* significance_level(double p_value, double mean_diff_ns) {
 int test_sha256_90r_correctness() {
     printf("=== SHA256-90R Functional Correctness Test ===\n");
 
-    BYTE hash_scalar[SHA256_BLOCK_SIZE];
-    BYTE hash_90r[SHA256_BLOCK_SIZE];
-    SHA256_90R_CTX ctx;
+    uint8_t hash_90r[SHA256_90R_DIGEST_SIZE];
+    SHA256_90R_CTX *ctx;
 
     // Test with "abc"
-    sha256_90r_init(&ctx);
-    sha256_90r_update(&ctx, test_input_abc, strlen((char*)test_input_abc));
-    sha256_90r_final(&ctx, hash_90r);
+    ctx = sha256_90r_new(SHA256_90R_MODE_SECURE);
+    sha256_90r_update(ctx, test_input_abc, strlen((char*)test_input_abc));
+    sha256_90r_final(ctx, hash_90r);
+    sha256_90r_free(ctx);
 
     print_hex(test_input_abc, strlen((char*)test_input_abc), "Input 'abc'");
-    print_hex(hash_90r, SHA256_BLOCK_SIZE, "SHA256-90R output");
+    print_hex(hash_90r, SHA256_90R_DIGEST_SIZE, "SHA256-90R output");
 
     // Verify basic functionality (should produce valid output)
     int has_nonzero = 0;
-    for (int i = 0; i < SHA256_BLOCK_SIZE; i++) {
+    for (int i = 0; i < SHA256_90R_DIGEST_SIZE; i++) {
         if (hash_90r[i] != 0) has_nonzero = 1;
     }
 
@@ -286,8 +270,8 @@ void test_all_backends_timing() {
     // Multiple test cases for comprehensive timing analysis
     struct {
         const char* name;
-        BYTE input1[TEST_BLOCK_SIZE];
-        BYTE input2[TEST_BLOCK_SIZE];
+        uint8_t input1[TEST_BLOCK_SIZE];
+        uint8_t input2[TEST_BLOCK_SIZE];
     } test_cases[] = {
         {"All zeros vs single bit flip", {0}, {0}},
         {"All ones vs bit flip", {0}, {0}},
@@ -381,8 +365,8 @@ void test_timing_side_channels() {
     printf("\n=== SHA256-90R Timing Side-Channel Analysis ===\n");
 
     // Test cases for timing analysis
-    BYTE input1[TEST_BLOCK_SIZE] = {0}; // All zeros
-    BYTE input2[TEST_BLOCK_SIZE] = {0}; // Will be modified
+    uint8_t input1[TEST_BLOCK_SIZE] = {0}; // All zeros
+    uint8_t input2[TEST_BLOCK_SIZE] = {0}; // Will be modified
     input2[0] ^= 0x01; // Single bit flip
 
     // Allocate memory for timing samples
@@ -426,35 +410,36 @@ void test_timing_side_channels() {
 void test_edge_cases() {
     printf("\n=== SHA256-90R Edge Cases Test ===\n");
 
-    SHA256_90R_CTX ctx;
-    BYTE hash[SHA256_BLOCK_SIZE];
+    SHA256_90R_CTX *ctx;
+    uint8_t hash[SHA256_90R_DIGEST_SIZE];
 
     // Test cases
     struct {
         const char* name;
-        BYTE* input;
+        uint8_t* input;
         size_t len;
     } test_cases[] = {
-        {"Empty string", (BYTE*)"", 0},
-        {"Single character 'a'", (BYTE*)"a", 1},
-        {"Standard test 'abc'", (BYTE*)"abc", 3},
-        {"64-byte block", (BYTE*)"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd", 64},
+        {"Empty string", (uint8_t*)"", 0},
+        {"Single character 'a'", (uint8_t*)"a", 1},
+        {"Standard test 'abc'", (uint8_t*)"abc", 3},
+        {"64-byte block", (uint8_t*)"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd", 64},
         {"Large input (1KB)", NULL, 1024}
     };
 
     // Generate 1KB test data
-    BYTE large_input[1024];
+    uint8_t large_input[1024];
     memset(large_input, 'A', 1024);
     test_cases[4].input = large_input;
 
     for (int i = 0; i < 5; i++) {
         printf("\nTest case: %s\n", test_cases[i].name);
 
-        sha256_90r_init(&ctx);
-        sha256_90r_update(&ctx, test_cases[i].input, test_cases[i].len);
-        sha256_90r_final(&ctx, hash);
+        ctx = sha256_90r_new(SHA256_90R_MODE_SECURE);
+        sha256_90r_update(ctx, test_cases[i].input, test_cases[i].len);
+        sha256_90r_final(ctx, hash);
+        sha256_90r_free(ctx);
 
-        print_hex(hash, SHA256_BLOCK_SIZE, "SHA256-90R output");
+        print_hex(hash, SHA256_90R_DIGEST_SIZE, "SHA256-90R output");
         printf("  Result: COMPLETED\n");
     }
 }
@@ -465,45 +450,49 @@ void test_edge_cases() {
 void test_known_vectors() {
     printf("\n=== SHA256-90R Known Test Vectors ===\n");
 
-    SHA256_90R_CTX ctx;
-    BYTE hash[SHA256_BLOCK_SIZE];
+    SHA256_90R_CTX *ctx;
+    uint8_t hash[SHA256_90R_DIGEST_SIZE];
 
     // Test vector 1: "abc"
-    sha256_90r_init(&ctx);
-    sha256_90r_update(&ctx, test_input_abc, strlen((char*)test_input_abc));
-    sha256_90r_final(&ctx, hash);
+    ctx = sha256_90r_new(SHA256_90R_MODE_SECURE);
+    sha256_90r_update(ctx, test_input_abc, strlen((char*)test_input_abc));
+    sha256_90r_final(ctx, hash);
+    sha256_90r_free(ctx);
     print_hex(test_input_abc, strlen((char*)test_input_abc), "Input 'abc'");
-    print_hex(hash, SHA256_BLOCK_SIZE, "SHA256-90R output");
+    print_hex(hash, SHA256_90R_DIGEST_SIZE, "SHA256-90R output");
 
     // Test vector 2: Empty string
-    BYTE empty_input[] = "";
-    sha256_90r_init(&ctx);
-    sha256_90r_update(&ctx, empty_input, 0);
-    sha256_90r_final(&ctx, hash);
+    uint8_t empty_input[] = "";
+    ctx = sha256_90r_new(SHA256_90R_MODE_SECURE);
+    sha256_90r_update(ctx, empty_input, 0);
+    sha256_90r_final(ctx, hash);
+    sha256_90r_free(ctx);
     print_hex(empty_input, 0, "Input empty string");
-    print_hex(hash, SHA256_BLOCK_SIZE, "SHA256-90R output");
+    print_hex(hash, SHA256_90R_DIGEST_SIZE, "SHA256-90R output");
 
     // Test vector 3: "foobar"
-    BYTE foobar_input[] = "foobar";
-    sha256_90r_init(&ctx);
-    sha256_90r_update(&ctx, foobar_input, strlen((char*)foobar_input));
-    sha256_90r_final(&ctx, hash);
+    uint8_t foobar_input[] = "foobar";
+    ctx = sha256_90r_new(SHA256_90R_MODE_SECURE);
+    sha256_90r_update(ctx, foobar_input, strlen((char*)foobar_input));
+    sha256_90r_final(ctx, hash);
+    sha256_90r_free(ctx);
     print_hex(foobar_input, strlen((char*)foobar_input), "Input 'foobar'");
-    print_hex(hash, SHA256_BLOCK_SIZE, "SHA256-90R output");
+    print_hex(hash, SHA256_90R_DIGEST_SIZE, "SHA256-90R output");
 
     // Test vector 4: 1MB random data
-    BYTE *large_input = malloc(MEGABYTE);
+    uint8_t *large_input = malloc(MEGABYTE);
     if (large_input) {
         srand(42); // Deterministic seed
         for (int i = 0; i < MEGABYTE; i++) {
             large_input[i] = rand() % 256;
         }
 
-        sha256_90r_init(&ctx);
-        sha256_90r_update(&ctx, large_input, MEGABYTE);
-        sha256_90r_final(&ctx, hash);
+        ctx = sha256_90r_new(SHA256_90R_MODE_SECURE);
+        sha256_90r_update(ctx, large_input, MEGABYTE);
+        sha256_90r_final(ctx, hash);
+        sha256_90r_free(ctx);
         printf("Input: 1MB random data\n");
-        print_hex(hash, SHA256_BLOCK_SIZE, "SHA256-90R output");
+        print_hex(hash, SHA256_90R_DIGEST_SIZE, "SHA256-90R output");
 
         free(large_input);
     }

@@ -13,7 +13,7 @@
 #include <time.h>
 #include <math.h>
 #include <stdint.h>
-#include "../src/sha256_90r/sha256.h"
+#include "../src/sha256_90r/sha256_90r.h"
 
 /****************************** MACROS ******************************/
 #define NUM_SAMPLES 1000
@@ -77,18 +77,19 @@ double welch_t_test(const double *samples1, size_t count1,
 /**
  * Time a single SHA256-90R operation
  */
-double time_sha256_90r(const BYTE *input, size_t input_len) {
+double time_sha256_90r(const uint8_t *input, size_t input_len) {
     struct timespec start, end;
-    SHA256_90R_CTX ctx;
-    BYTE hash[SHA256_BLOCK_SIZE];
+    SHA256_90R_CTX *ctx;
+    uint8_t hash[SHA256_90R_DIGEST_SIZE];
 
     // Start timing
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
 
     // Initialize context
-    sha256_90r_init(&ctx);
-    sha256_90r_update(&ctx, input, input_len);
-    sha256_90r_final(&ctx, hash);
+    ctx = sha256_90r_new(SHA256_90R_MODE_SECURE);
+    sha256_90r_update(ctx, input, input_len);
+    sha256_90r_final(ctx, hash);
+    sha256_90r_free(ctx);
 
     // End timing
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
@@ -103,7 +104,7 @@ double time_sha256_90r(const BYTE *input, size_t input_len) {
 /**
  * Collect timing samples
  */
-void collect_timing_samples(double *samples, size_t count, const BYTE *input, size_t input_len) {
+void collect_timing_samples(double *samples, size_t count, const uint8_t *input, size_t input_len) {
     for (size_t i = 0; i < count; i++) {
         samples[i] = time_sha256_90r(input, input_len);
     }
@@ -127,8 +128,8 @@ int main() {
     printf("=== SHA256-90R Quick Timing Test ===\n");
 
     // Test cases
-    BYTE input1[INPUT_SIZE] = {0}; // All zeros
-    BYTE input2[INPUT_SIZE] = {0}; // Will be modified
+    uint8_t input1[INPUT_SIZE] = {0}; // All zeros
+    uint8_t input2[INPUT_SIZE] = {0}; // Will be modified
     input2[0] ^= 0x01; // Single bit flip
 
     // Allocate memory for timing samples

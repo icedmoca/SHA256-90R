@@ -72,6 +72,7 @@ endif()
 # Source files
 set(SHA256_90R_SOURCES
     src/sha256_90r/sha256.c
+    src/sha256_90r/sha256_90r.c
 )
 
 set(SHA256_90R_HEADERS

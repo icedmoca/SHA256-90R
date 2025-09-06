@@ -14,8 +14,7 @@
 #include <time.h>
 #include <math.h>
 #include <stdint.h>
-#include "../src/sha256_90r/sha256_internal.h"
-#include "../src/sha256_90r/sha256.h"  // For SHA256_BLOCK_SIZE constant
+#include "../src/sha256_90r/sha256_90r.h"
 
 // Disable SIMD for timing test to ensure constant-time behavior
 #undef USE_SIMD
@@ -35,7 +34,7 @@ typedef struct {
 
 /*********************** FUNCTION DECLARATIONS **********************/
 void collect_timing_samples_backend(double *samples, size_t count,
-                                    const BYTE *input, size_t input_len,
+                                    const uint8_t *input, size_t input_len,
                                     const char *backend);
 
 /*********************** FUNCTION DEFINITIONS ***********************/
@@ -113,47 +112,37 @@ double welch_t_test(const double *samples1, size_t count1,
 /**
  * Time a single SHA256-90R operation using specified backend
  */
-double time_sha256_90r_backend(const BYTE *input, size_t input_len, const char* backend) {
+double time_sha256_90r_backend(const uint8_t *input, size_t input_len, const char* backend) {
     struct timespec start, end;
-    SHA256_90R_CTX ctx;
-    BYTE hash[SHA256_BLOCK_SIZE];
+    SHA256_90R_CTX *ctx;
+    uint8_t hash[SHA256_90R_DIGEST_SIZE];
+    sha256_90r_backend_t backend_type = SHA256_90R_BACKEND_SCALAR;
+
+    // Map backend string to backend type
+    if (strcmp(backend, "scalar") == 0) {
+        backend_type = SHA256_90R_BACKEND_SCALAR;
+    } else if (strcmp(backend, "simd") == 0) {
+        backend_type = SHA256_90R_BACKEND_SIMD;
+    } else if (strcmp(backend, "sha_ni") == 0) {
+        backend_type = SHA256_90R_BACKEND_SHA_NI;
+    } else if (strcmp(backend, "gpu") == 0) {
+        backend_type = SHA256_90R_BACKEND_GPU;
+    } else if (strcmp(backend, "fpga") == 0) {
+        backend_type = SHA256_90R_BACKEND_FPGA;
+    } else if (strcmp(backend, "jit") == 0) {
+        backend_type = SHA256_90R_BACKEND_JIT;
+    } else {
+        backend_type = SHA256_90R_BACKEND_SCALAR; // Default
+    }
 
     // Start timing
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
 
-    // Initialize context with fixed values to eliminate initialization timing
-    ctx.datalen = 0;
-    ctx.bitlen = 0;
-    ctx.state[0] = 0x6a09e667;
-    ctx.state[1] = 0xbb67ae85;
-    ctx.state[2] = 0x3c6ef372;
-    ctx.state[3] = 0xa54ff53a;
-    ctx.state[4] = 0x510e527f;
-    ctx.state[5] = 0x9b05688c;
-    ctx.state[6] = 0x1f83d9ab;
-    ctx.state[7] = 0x5be0cd19;
-
-    // Call the appropriate backend transform function
-    if (strcmp(backend, "scalar") == 0) {
-        sha256_90r_transform_scalar(&ctx, input);
-    } else if (strcmp(backend, "fpga") == 0) {
-#ifdef USE_FPGA_PIPELINE
-        sha256_90r_transform_fpga(&ctx, input);
-#else
-        // Fallback to scalar if FPGA not available
-        sha256_90r_transform_scalar(&ctx, input);
-#endif
-    } else if (strcmp(backend, "jit") == 0) {
-#ifdef USE_JIT_CODEGEN
-        sha256_90r_transform_jit(&ctx, input);
-#else
-        // Fallback to scalar if JIT not available
-        sha256_90r_transform_scalar(&ctx, input);
-#endif
-    } else {
-        // Default to scalar
-        sha256_90r_transform_scalar(&ctx, input);
-    }
+    // Use public API with specified backend
+    ctx = sha256_90r_new_backend(backend_type);
+    sha256_90r_update(ctx, input, input_len);
+    sha256_90r_final(ctx, hash);
+    sha256_90r_free(ctx);
 
     // End timing
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
@@ -168,14 +157,14 @@ double time_sha256_90r_backend(const BYTE *input, size_t input_len, const char* 
 /**
  * Legacy function for backward compatibility
  */
-double time_sha256_90r(const BYTE *input, size_t input_len) {
+double time_sha256_90r(const uint8_t *input, size_t input_len) {
     return time_sha256_90r_backend(input, input_len, "scalar");
 }
 
 /**
  * Collect timing samples for a given input
  */
-void collect_timing_samples(double *samples, size_t count, const BYTE *input, size_t input_len) {
+void collect_timing_samples(double *samples, size_t count, const uint8_t *input, size_t input_len) {
     printf("Collecting %zu timing samples...\n", count);
 
     for (size_t i = 0; i < count; i++) {
@@ -224,8 +213,8 @@ const char* significance_level(double p_value, double mean_diff_ns) {
  */
 typedef struct {
     const char* name;
-    BYTE input1[INPUT_SIZE];
-    BYTE input2[INPUT_SIZE];
+    uint8_t input1[INPUT_SIZE];
+    uint8_t input2[INPUT_SIZE];
     const char* description;
 } test_case_t;
 
@@ -398,7 +387,7 @@ void test_backend_timing_leaks(const char* backend_name) {
 /**
  * Collect timing samples for a specific backend
  */
-void collect_timing_samples_backend(double *samples, size_t count, const BYTE *input, size_t input_len, const char* backend) {
+void collect_timing_samples_backend(double *samples, size_t count, const uint8_t *input, size_t input_len, const char* backend) {
     printf("Collecting %zu timing samples using %s backend...\n", count, backend);
 
     for (size_t i = 0; i < count; i++) {
