@@ -133,7 +133,6 @@ target_include_directories(base64x PUBLIC
 
 # Install rules
 install(TARGETS aes_xr blowfish_xr base64x
-    EXPORT SHA256-90RTargets
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
     RUNTIME DESTINATION bin
@@ -198,7 +197,6 @@ endif()
 
 # Installation
 install(TARGETS sha256_90r aes_xr blowfish_xr base64x
-    EXPORT SHA256_90R_Targets
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
     RUNTIME DESTINATION bin
@@ -216,34 +214,34 @@ install(DIRECTORY src/blowfish_xr/ DESTINATION include/blowfish_xr
 install(DIRECTORY src/base64x/ DESTINATION include/base64x
         FILES_MATCHING PATTERN "*.h")
 
-# pkg-config file
-configure_file(sha256_90r.pc.in sha256_90r.pc @ONLY)
-install(FILES ${CMAKE_BINARY_DIR}/sha256_90r.pc
-    DESTINATION lib/pkgconfig
-)
+# pkg-config file (commented out - requires sha256_90r.pc.in)
+# configure_file(sha256_90r.pc.in sha256_90r.pc @ONLY)
+# install(FILES ${CMAKE_BINARY_DIR}/sha256_90r.pc
+#     DESTINATION lib/pkgconfig
+# )
 
-# CMake config
-install(EXPORT SHA256_90R_Targets
-    FILE SHA256_90RTargets.cmake
-    DESTINATION lib/cmake/SHA256_90R
-)
+# CMake config (commented out - complex packaging)
+# install(EXPORT SHA256_90R_Targets
+#     FILE SHA256_90RTargets.cmake
+#     DESTINATION lib/cmake/SHA256_90R
+# )
 
-# Create config file
-include(CMakePackageConfigHelpers)
-configure_package_config_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/SHA256_90RConfig.cmake.in
-    ${CMAKE_CURRENT_BINARY_DIR}/SHA256_90RConfig.cmake
-    INSTALL_DESTINATION lib/cmake/SHA256_90R
-)
-
-write_basic_package_version_file(
-    ${CMAKE_CURRENT_BINARY_DIR}/SHA256_90RConfigVersion.cmake
-    VERSION ${PROJECT_VERSION}
-    COMPATIBILITY SameMajorVersion
-)
-
-install(FILES
-    ${CMAKE_CURRENT_BINARY_DIR}/SHA256_90RConfig.cmake
-    ${CMAKE_CURRENT_BINARY_DIR}/SHA256_90RConfigVersion.cmake
-    DESTINATION lib/cmake/SHA256_90R
-)
+# Create config file (commented out - requires SHA256_90RConfig.cmake.in)
+# include(CMakePackageConfigHelpers)
+# configure_package_config_file(
+#     ${CMAKE_CURRENT_SOURCE_DIR}/SHA256_90RConfig.cmake.in
+#     ${CMAKE_CURRENT_BINARY_DIR}/SHA256_90RConfig.cmake
+#     INSTALL_DESTINATION lib/cmake/SHA256_90R
+# )
+#
+# write_basic_package_version_file(
+#     ${CMAKE_CURRENT_BINARY_DIR}/SHA256_90RConfigVersion.cmake
+#     VERSION ${PROJECT_VERSION}
+#     COMPATIBILITY SameMajorVersion
+# )
+#
+# install(FILES
+#     ${CMAKE_CURRENT_BINARY_DIR}/SHA256_90RConfig.cmake
+#     ${CMAKE_CURRENT_BINARY_DIR}/SHA256_90RConfigVersion.cmake
+#     DESTINATION lib/cmake/SHA256_90R
+# )

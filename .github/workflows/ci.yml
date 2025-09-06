@@ -128,7 +128,7 @@ jobs:
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v3
       with:
-        languages: c-cpp
+        languages: cpp
     
     - name: Autobuild
       uses: github/codeql-action/autobuild@v3
