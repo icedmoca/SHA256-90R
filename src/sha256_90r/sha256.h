@@ -41,6 +41,7 @@ void sha256_final(SHA256_CTX *ctx, BYTE hash[]);
 /*********************** SHA-256-90R FUNCTION DECLARATIONS **********************/
 void sha256_90r_init(SHA256_90R_CTX *ctx);
 void sha256_90r_update(SHA256_90R_CTX *ctx, const BYTE data[], size_t len);
+void sha256_90r_update_fast(SHA256_90R_CTX *ctx, const BYTE data[], size_t len);
 void sha256_90r_final(SHA256_90R_CTX *ctx, BYTE hash[]);
 
 /*********************** CONSTANT-TIME SCALAR IMPLEMENTATION **********************/
@@ -52,6 +53,12 @@ void sha256_90r_transform_simd(SHA256_90R_CTX *ctx, const BYTE data[]);
 void sha256_90r_transform_avx2(SHA256_90R_CTX *ctx, const BYTE data[]);
 void sha256_90r_transform_avx512(SHA256_90R_CTX *ctx, const BYTE data[]);
 void sha256_90r_transform_neon(SHA256_90R_CTX *ctx, const BYTE data[]);
+
+// Aggressive multi-block SIMD functions
+void sha256_90r_transform_avx2_8way(SHA256_90R_CTX ctxs[8], const BYTE data[8][64]);
+#ifdef __AVX512F__
+void sha256_90r_transform_avx512_16way(SHA256_90R_CTX ctxs[16], const BYTE data[16][64]);
+#endif
 #endif
 
 #ifdef USE_MULTIBLOCK_SIMD
@@ -61,11 +68,17 @@ void sha256_90r_transform_multiblock_simd(SHA256_90R_CTX ctxs[4], const BYTE dat
 /*********************** GPU-ACCELERATED FUNCTIONS **********************/
 #ifdef USE_CUDA
 cudaError_t sha256_90r_transform_cuda(SHA256_90R_CTX *ctx, const BYTE *data, size_t num_blocks);
+#else
+// Define CUDA types for compatibility when CUDA is not available
+typedef int cudaError_t;
+#define cudaSuccess 0
 #endif
 
+/*********************** PIPELINED PROCESSING FUNCTIONS **********************/
+void sha256_90r_transform_pipelined(SHA256_90R_CTX *ctx, const BYTE data[], size_t num_blocks);
+
 /*********************** MULTI-BLOCK PARALLEL FUNCTIONS **********************/
-void sha256_90r_transform_parallel(SHA256_90R_CTX *ctx, const BYTE data[], size_t num_blocks);
-void sha256_90r_update_parallel(SHA256_90R_CTX *ctx, const BYTE data[], size_t len, int num_threads);
+void sha256_90r_transform_parallel(SHA256_90R_CTX *ctx, const BYTE data[], size_t len, int num_threads);
 
 /*********************** TREE HASHING MODE **********************/
 #ifdef USE_TREE_HASHING
@@ -90,6 +103,12 @@ void sha256_90r_tree_hash_final(SHA256_90R_TREE_CTX *ctx, BYTE hash[]);
 #ifdef USE_SHA_NI
 // SHA-NI accelerated transform (hybrid with software rounds)
 void sha256_90r_transform_sha_ni(SHA256_90R_CTX *ctx, const BYTE data[]);
+#endif
+
+/*********************** ARMv8 CRYPTO EXTENSIONS **********************/
+#ifdef USE_ARMV8_CRYPTO
+// ARMv8 crypto-accelerated transform
+void sha256_90r_transform_armv8_crypto(SHA256_90R_CTX *ctx, const BYTE data[]);
 #endif
 
 /*********************** FPGA PIPELINE PROTOTYPE **********************/

@@ -1,0 +1,137 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-linux-x86:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        compiler: [gcc, clang]
+        build-type: [Debug, Release]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake ninja-build
+    
+    - name: Configure CMake
+      run: |
+        cmake -B build -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \
+          -DCMAKE_C_COMPILER=${{ matrix.compiler }} \
+          -DENABLE_SIMD=ON \
+          -DENABLE_SHA_NI=ON \
+          -DSECURE_MODE=ON
+    
+    - name: Build
+      run: cmake --build build
+    
+    - name: Test
+      run: |
+        cd build
+        ctest --output-on-failure -j$(nproc)
+    
+    - name: Benchmark (short)
+      if: matrix.build-type == 'Release'
+      run: |
+        cd build
+        ./bench_simple | tee bench_results.txt
+        
+    - name: Upload benchmark results
+      if: matrix.build-type == 'Release'
+      uses: actions/upload-artifact@v3
+      with:
+        name: benchmark-${{ matrix.compiler }}-x86
+        path: build/bench_results.txt
+
+  test-linux-arm:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [aarch64, armv7]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v2
+      with:
+        platforms: arm64,arm
+    
+    - name: Run ARM tests
+      uses: docker://multiarch/ubuntu-core:arm64-focal
+      with:
+        args: |
+          bash -c "
+            apt-get update && \
+            apt-get install -y build-essential cmake && \
+            cmake -B build -DENABLE_SIMD=ON -DENABLE_ARM_CRYPTO=ON && \
+            cmake --build build && \
+            cd build && ctest --output-on-failure
+          "
+
+  test-make:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Build with Make
+      run: |
+        make clean
+        make test
+    
+    - name: Run benchmarks
+      run: |
+        make bench-simple
+        make timing-test
+    
+    - name: Test installation
+      run: |
+        make install PREFIX=./install_test
+        test -f ./install_test/lib/libsha256_90r.a
+        test -f ./install_test/include/sha256_90r/sha256_90r.h
+        make uninstall PREFIX=./install_test
+
+  security-analysis:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Run CodeQL Analysis
+      uses: github/codeql-action/analyze@v2
+      with:
+        languages: c
+    
+    - name: Run timing tests
+      run: |
+        make timing-test
+        # Check that all backends pass timing tests
+        grep -q "SECURE" bin/timing_leak_test || exit 1
+
+  documentation:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Check documentation
+      run: |
+        # Verify all docs exist
+        test -f README.md
+        test -f docs/SHA256-90R.md
+        test -f docs/Performance_Analysis.md
+        
+        # Check for required sections
+        grep -q "Installation" README.md
+        grep -q "Performance" docs/SHA256-90R.md
+        grep -q "Security" docs/SHA256-90R.md

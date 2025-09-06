@@ -1,0 +1,15 @@
+# SHA256-90R Benchmark Results
+# Generated: Fri Sep  5 20:08:45 2025
+# Input size: 4096 bytes
+# Iterations per backend: 10000
+# CPU Clock: 3.5 GHz
+
+Backend,Cycles_per_Byte,Bytes_per_Cycle,Throughput_Gbps,Latency_us,Slowdown_vs_SHA256,Supported
+scalar,797.62,0.0013,0.0351,933.44,1.1,1
+simd,807.48,0.0012,0.0347,944.99,1.1,1
+sha_ni,N/A,N/A,N/A,N/A,N/A,0
+gpu,805.20,0.0012,0.0348,942.32,1.0,1
+gpu_batch,N/A,N/A,N/A,N/A,N/A,0
+pipelined,798.29,0.0013,0.0351,934.22,1.1,1
+fpga,859.02,0.0012,0.0326,1005.29,1.1,1
+jit,807.90,0.0012,0.0347,945.47,0.7,1

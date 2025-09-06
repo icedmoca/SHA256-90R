@@ -26,27 +26,39 @@ static const uint32_t k_90r_fpga[96] = {
 	0xb3df34fc,0xb99bb8d7,0,0,0,0,0,0
 };
 
-// FPGA pipeline stage structure
+// Optimized FPGA pipeline stage structure for 90-round SHA256-90R
 typedef struct {
 	uint32_t a, b, c, d, e, f, g, h;
 	uint32_t w;  // Message word for this stage
 	uint32_t k;  // Round constant for this stage
 	int valid;   // Pipeline stage valid flag
+	int round;   // Current round number (0-89)
 } fpga_pipeline_stage_t;
 
-// Complete FPGA pipeline with 90 stages
+// Complete FPGA pipeline with 90 stages (1 hash/clock after warm-up)
 #define FPGA_PIPELINE_DEPTH 90
 typedef struct {
 	fpga_pipeline_stage_t stages[FPGA_PIPELINE_DEPTH];
 	int pipeline_filled;
 	int current_stage;
+	uint32_t initial_state[8]; // SHA256 initial state
 } fpga_pipeline_t;
 
-// Initialize FPGA pipeline
+// Initialize FPGA pipeline with SHA256 initial state
 void fpga_pipeline_init(fpga_pipeline_t *pipeline) {
 	memset(pipeline, 0, sizeof(fpga_pipeline_t));
 	pipeline->pipeline_filled = 0;
 	pipeline->current_stage = 0;
+
+	// Set SHA256 initial state
+	pipeline->initial_state[0] = 0x6a09e667;
+	pipeline->initial_state[1] = 0xbb67ae85;
+	pipeline->initial_state[2] = 0x3c6ef372;
+	pipeline->initial_state[3] = 0xa54ff53a;
+	pipeline->initial_state[4] = 0x510e527f;
+	pipeline->initial_state[5] = 0x9b05688c;
+	pipeline->initial_state[6] = 0x1f83d9ab;
+	pipeline->initial_state[7] = 0x5be0cd19;
 }
 
 // FPGA round function (single stage computation)
@@ -167,44 +179,89 @@ void fpga_pipeline_get_output(fpga_pipeline_t *pipeline, uint32_t hash[8]) {
 	hash[7] = output_stage->h;
 }
 
-// Constant-time SHA256-90R FPGA pipeline simulation
+// Batch processing FPGA pipeline for maximum throughput
+// Processes multiple blocks with 1 hash per clock after pipeline warm-up
+typedef struct {
+	fpga_pipeline_t pipelines[FPGA_PIPELINE_DEPTH]; // Pipeline array for batch processing
+	size_t batch_size;
+	size_t current_block;
+	int pipelines_initialized;
+} fpga_batch_pipeline_t;
+
+// Initialize batch FPGA pipeline
+void fpga_batch_pipeline_init(fpga_batch_pipeline_t *batch_pipeline, size_t batch_size) {
+	batch_pipeline->batch_size = batch_size;
+	batch_pipeline->current_block = 0;
+	batch_pipeline->pipelines_initialized = 0;
+
+	// Initialize all pipelines
+	for (int i = 0; i < FPGA_PIPELINE_DEPTH; ++i) {
+		fpga_pipeline_init(&batch_pipeline->pipelines[i]);
+	}
+	batch_pipeline->pipelines_initialized = 1;
+}
+
+// Process batch of blocks through FPGA pipelines
+void fpga_batch_process(fpga_batch_pipeline_t *batch_pipeline,
+                       SHA256_90R_CTX ctxs[],
+                       const BYTE data[],
+                       size_t num_blocks) {
+	uint32_t m[FPGA_PIPELINE_DEPTH][90];
+	int i, j, block_idx;
+
+	// Pre-compute message schedules for all blocks (constant-time)
+	for (block_idx = 0; block_idx < num_blocks && block_idx < FPGA_PIPELINE_DEPTH; ++block_idx) {
+		const BYTE* block_data = data + block_idx * 64;
+
+		// Initialize message schedule
+		for (i = 0, j = 0; i < 16; ++i, j += 4) {
+			m[block_idx][i] = (block_data[j] << 24) | (block_data[j + 1] << 16) |
+							 (block_data[j + 2] << 8) | block_data[j + 3];
+		}
+
+		// Pre-expand all message words upfront
+		for (i = 16; i < 90; ++i) {
+			uint32_t s0 = ((m[block_idx][i-15] >> 7) | (m[block_idx][i-15] << 25)) ^
+						 ((m[block_idx][i-15] >> 18) | (m[block_idx][i-15] << 14)) ^ (m[block_idx][i-15] >> 3);
+			uint32_t s1 = ((m[block_idx][i-2] >> 17) | (m[block_idx][i-2] << 15)) ^
+						 ((m[block_idx][i-2] >> 19) | (m[block_idx][i-2] << 13)) ^ (m[block_idx][i-2] >> 10);
+			m[block_idx][i] = m[block_idx][i-16] + s0 + m[block_idx][i-7] + s1;
+		}
+	}
+
+	// Pipeline processing: 90 input cycles + 89 drain cycles per block
+	// But with multiple pipelines, we achieve 1 hash per clock after warm-up
+	for (int cycle = 0; cycle < 90 + (FPGA_PIPELINE_DEPTH - 1); ++cycle) {
+		for (block_idx = 0; block_idx < num_blocks && block_idx < FPGA_PIPELINE_DEPTH; ++block_idx) {
+			fpga_pipeline_t *pipeline = &batch_pipeline->pipelines[block_idx];
+			int input_cycle = cycle < 90;
+			uint32_t w = input_cycle ? m[block_idx][cycle] : 0;
+			uint32_t k = input_cycle ? k_90r_fpga[cycle] : 0;
+
+			fpga_pipeline_clock(pipeline, w, k, input_cycle);
+		}
+
+		// Check for completed hashes and collect results
+		for (block_idx = 0; block_idx < num_blocks && block_idx < FPGA_PIPELINE_DEPTH; ++block_idx) {
+			fpga_pipeline_t *pipeline = &batch_pipeline->pipelines[block_idx];
+			if (fpga_pipeline_has_output(pipeline)) {
+				uint32_t hash[8];
+				fpga_pipeline_get_output(pipeline, hash);
+
+				// Add to context state
+				for (i = 0; i < 8; ++i) {
+					ctxs[block_idx].state[i] += hash[i];
+				}
+			}
+		}
+	}
+}
+
+// Single-block FPGA transform (backward compatibility)
 void sha256_90r_transform_fpga(SHA256_90R_CTX *ctx, const BYTE data[]) {
-	uint32_t m[90];
-	uint32_t hash[8];
-	fpga_pipeline_t pipeline;
-	int i, j;
-
-	// Initialize message schedule (constant-time)
-	for (i = 0, j = 0; i < 16; ++i, j += 4) {
-		m[i] = (data[j] << 24) | (data[j + 1] << 16) | (data[j + 2] << 8) | data[j + 3];
-	}
-
-	for (i = 16; i < 90; ++i) {
-		uint32_t s0 = ((m[i-15] >> 7) | (m[i-15] << 25)) ^ ((m[i-15] >> 18) | (m[i-15] << 14)) ^ (m[i-15] >> 3);
-		uint32_t s1 = ((m[i-2] >> 17) | (m[i-2] << 15)) ^ ((m[i-2] >> 19) | (m[i-2] << 13)) ^ (m[i-2] >> 10);
-		m[i] = m[i-16] + s0 + m[i-7] + s1;
-	}
-
-	// Initialize FPGA pipeline
-	fpga_pipeline_init(&pipeline);
-
-	// Feed message words through pipeline (constant-time: always 90 + 89 cycles)
-	for (i = 0; i < 90; ++i) {
-		fpga_pipeline_clock(&pipeline, m[i], k_90r_fpga[i], 1);
-	}
-
-	// Drain pipeline with fixed number of cycles (constant-time)
-	for (i = 0; i < FPGA_PIPELINE_DEPTH - 1; ++i) {
-		fpga_pipeline_clock(&pipeline, 0, 0, 0);
-	}
-
-	// Get final hash from pipeline
-	fpga_pipeline_get_output(&pipeline, hash);
-
-	// Add to context state
-	for (i = 0; i < 8; ++i) {
-		ctx->state[i] += hash[i];
-	}
+	fpga_batch_pipeline_t batch_pipeline;
+	fpga_batch_pipeline_init(&batch_pipeline, 1);
+	fpga_batch_process(&batch_pipeline, ctx, data, 1);
 }
 
 // FPGA timing test harness for constant-time verification
