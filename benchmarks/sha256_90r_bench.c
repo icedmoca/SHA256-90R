@@ -16,6 +16,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <unistd.h>
+#include <sys/wait.h>
 #if defined(__x86_64__) || defined(__i386__)
 #include <cpuid.h>
 #endif
@@ -813,19 +814,56 @@ void run_perf_profiling(const char* backend, size_t input_size) {
     }
     generate_test_input(test_input, input_size);
 
-    // Build perf command
-    char perf_cmd[1024];
-    snprintf(perf_cmd, sizeof(perf_cmd),
-             "perf stat -e cycles,instructions,cache-misses,cache-references,branch-misses,branch-instructions,stalled-cycles-frontend,stalled-cycles-backend,L1-dcache-load-misses,L1-dcache-loads,LLC-load-misses,LLC-loads "
-             "./bin/sha256_90r_bench --backend %s --input-size %zu --runs 3",
-             backend, input_size);
+    // Build perf command arguments safely
+    char input_size_str[32];
+    snprintf(input_size_str, sizeof(input_size_str), "%zu", input_size);
+    
+    char *args[] = {
+        "perf",
+        "stat",
+        "-e",
+        "cycles,instructions,cache-misses,cache-references,branch-misses,branch-instructions,stalled-cycles-frontend,stalled-cycles-backend,L1-dcache-load-misses,L1-dcache-loads,LLC-load-misses,LLC-loads",
+        "./bin/sha256_90r_bench",
+        "--backend",
+        (char*)backend,  // Cast away const since execvp doesn't modify it
+        "--input-size",
+        input_size_str,
+        "--runs",
+        "3",
+        NULL
+    };
+    
+    // Print equivalent command line for debugging
+    printf("Running perf command:\n");
+    for (int i = 0; args[i] != NULL; i++) {
+        printf("%s ", args[i]);
+    }
+    printf("\n\n");
 
-    printf("Running perf command:\n%s\n\n", perf_cmd);
-
-    // Execute perf stat
-    int result = system(perf_cmd);
-    if (result != 0) {
-        printf("Perf stat completed with exit code: %d\n", result);
+    // Execute perf stat safely using fork + execvp + waitpid
+    pid_t pid = fork();
+    if (pid == 0) {
+        // Child process: execute perf
+        execvp(args[0], args);
+        perror("execvp failed");
+        exit(1);
+    } else if (pid > 0) {
+        // Parent process: wait for child and get exit status
+        int status;
+        waitpid(pid, &status, 0);
+        if (WIFEXITED(status)) {
+            int exit_code = WEXITSTATUS(status);
+            if (exit_code != 0) {
+                printf("Perf stat exited with code: %d\n", exit_code);
+            }
+        } else {
+            printf("Perf stat terminated abnormally\n");
+        }
+    } else {
+        // Fork failed
+        perror("fork failed");
+        free(test_input);
+        return;
     }
 
     // Save perf results to file
@@ -833,7 +871,11 @@ void run_perf_profiling(const char* backend, size_t input_size) {
     if (fp) {
         fprintf(fp, "\n=== Perf Counter Results for %s backend ===\n", backend);
         fprintf(fp, "Input size: %zu bytes\n", input_size);
-        fprintf(fp, "Command: %s\n", perf_cmd);
+        fprintf(fp, "Command: ");
+        for (int i = 0; args[i] != NULL; i++) {
+            fprintf(fp, "%s ", args[i]);
+        }
+        fprintf(fp, "\n");
         fprintf(fp, "Timestamp: %s", ctime(&(time_t){time(NULL)}));
         fprintf(fp, "----------------------------------------\n");
         fclose(fp);
