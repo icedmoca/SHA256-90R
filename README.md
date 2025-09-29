@@ -215,26 +215,6 @@ SHA256-90R automatically detects and uses the best available backend for your ha
 export SHA256_90R_BACKEND=scalar  # Force specific backend
 ```
 
-## Secure Mode vs Fast Mode
-
-SHA256-90R supports multiple execution modes with different security/performance trade-offs:
-
-### Security Mode Configuration
-
-| Mode | Performance | Timing Safety | Use Case | How to Enable |
-|------|-------------|---------------|----------|---------------|
-| **SECURE_MODE** | 2.7 Gbps | ✅ Constant-time | **Production, cryptographic apps** | Default in timing tests |
-| **ACCEL_MODE** | 2.7-4.2 Gbps | ⚠️ May leak timing | Research, controlled environments | Development builds |
-| **FAST_MODE** | 4.2+ Gbps | ❌ Not constant-time | **Benchmarking only** | Benchmark applications |
-
-### Building with Secure Mode
-```bash
-# Enable secure mode for production use
-make timing-leak-test CFLAGS="-DSHA256_90R_SECURE_MODE=1"
-
-# Or with CMake
-cmake .. -DCMAKE_BUILD_TYPE=Release -DSECURE_MODE=ON
-```
 
 **⚠️ Security Warning**: Only SECURE_MODE provides constant-time execution to prevent side-channel attacks. Always use SECURE_MODE for cryptographic applications.
 
@@ -418,7 +398,7 @@ Status: ✅ SECURE
 
 ### Quick Start (Make)
 ```bash
-git clone https://github.com/yourusername/sha256-90r.git
+git clone https://github.com/icedmoca/sha256-90r.git
 cd sha256-90r
 make test         # Run all tests
 make bench        # Run benchmarks
@@ -574,3 +554,4 @@ SHA256-90R/
 ├── Makefile              # Build system
 └── README.md             # Documentation
 ```
+
